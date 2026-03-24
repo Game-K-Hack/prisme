@@ -10,20 +10,33 @@ import * as LucideIcons from 'lucide-vue-next'
 import type { Component } from 'vue'
 import MapEngine from '@/components/MapEngine.vue'
 import SettingsModal from '@/components/SettingsModal.vue'
+import PluginsModal from '@/components/PluginsModal.vue'
 import { usePluginStore, QUICK_FILTERS, MAP_LAYER_CONTROLS } from '@/store/pluginStore'
 import { useSettingsStore } from '@/store/settingsStore'
-import { fuelPlugin } from '@/plugins/fuelPlugin'
+import { PLUGIN_CATALOG } from '@/plugins/registry'
 
 const pluginStore = usePluginStore()
 const settings = useSettingsStore()
 
 onMounted(() => {
-  pluginStore.registerPlugin(fuelPlugin)
+  // Restaurer les plugins installés depuis localStorage, ou installer tous par défaut
+  const savedIds = pluginStore.getInstalledIds()
+  if (savedIds.length > 0) {
+    for (const plugin of PLUGIN_CATALOG) {
+      if (savedIds.includes(plugin.id)) pluginStore.registerPlugin(plugin)
+    }
+  } else {
+    // Premier lancement : installer tous les plugins
+    for (const plugin of PLUGIN_CATALOG) {
+      pluginStore.registerPlugin(plugin)
+    }
+  }
 })
 
 const sidebarOpen = ref(true)
 const toggleSidebar = () => { sidebarOpen.value = !sidebarOpen.value }
 const showSettings = ref(false)
+const showPlugins = ref(false)
 
 // ─── Recherche POI ───────────────────────────────────────────────────────────
 
@@ -140,9 +153,16 @@ const mapLayerControls = MAP_LAYER_CONTROLS
         <div class="flex items-center gap-2 px-3 mb-2">
           <Layers class="w-3.5 h-3.5 text-slate-500 flex-shrink-0" />
           <Transition name="fade">
-            <span v-if="sidebarOpen" class="text-[10px] font-semibold uppercase tracking-widest text-slate-500">
+            <span v-if="sidebarOpen" class="text-[10px] font-semibold uppercase tracking-widest text-slate-500 flex-1">
               Calques
             </span>
+          </Transition>
+          <Transition name="fade">
+            <button
+              v-if="sidebarOpen"
+              @click="showPlugins = true"
+              class="text-[10px] text-slate-600 hover:text-slate-300 transition-colors"
+            >Gérer</button>
           </Transition>
         </div>
 
@@ -512,6 +532,7 @@ const mapLayerControls = MAP_LAYER_CONTROLS
 
     <!-- ═══ SETTINGS MODAL ═══════════════════════════════════════════════════ -->
     <SettingsModal :open="showSettings" @close="showSettings = false" />
+    <PluginsModal :open="showPlugins" @close="showPlugins = false" />
 
   </div>
 </template>

@@ -344,6 +344,29 @@ export const usePluginStore = defineStore('plugins', () => {
   function registerPlugin(plugin: FranceDataPlugin): void {
     if (registry.value.has(plugin.id)) return
     registry.value.set(plugin.id, plugin)
+    saveInstalledIds()
+  }
+
+  function unregisterPlugin(id: string): void {
+    // Désactiver d'abord si actif
+    if (activeIds.value.has(id)) deactivatePlugin(id)
+    registry.value.delete(id)
+    saveInstalledIds()
+  }
+
+  /** Persiste la liste des IDs installés dans localStorage */
+  function saveInstalledIds(): void {
+    const ids = Array.from(registry.value.keys())
+    localStorage.setItem('prisme-installed-plugins', JSON.stringify(ids))
+  }
+
+  /** Charge la liste des IDs installés depuis localStorage */
+  function getInstalledIds(): string[] {
+    try {
+      const raw = localStorage.getItem('prisme-installed-plugins')
+      if (raw) return JSON.parse(raw)
+    } catch { /* ignore */ }
+    return []
   }
 
   function setMap(map: MapLibreMap): void {
@@ -667,7 +690,7 @@ export const usePluginStore = defineStore('plugins', () => {
     // Plugins
     registry, activeIds, mapInstance, selectedFeature,
     plugins, isActive,
-    setMap, selectFeature, registerPlugin,
+    setMap, selectFeature, registerPlugin, unregisterPlugin, getInstalledIds,
     activatePlugin, deactivatePlugin, togglePlugin,
     // Carte — POI
     poiLoading, poiSearches, poiWarning,
