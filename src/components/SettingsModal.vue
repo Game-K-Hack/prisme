@@ -1,11 +1,54 @@
 <script setup lang="ts">
-import { X, RotateCcw } from 'lucide-vue-next'
+import { ref } from 'vue'
+import { X, RotateCcw, Plus, Trash2 } from 'lucide-vue-next'
+import * as LucideIcons from 'lucide-vue-next'
+import type { Component } from 'vue'
 import { useSettingsStore, type AccentColor, type MapStyleKey } from '@/store/settingsStore'
+import { QUICK_FILTERS } from '@/store/pluginStore'
 
 defineProps<{ open: boolean }>()
 const emit = defineEmits<{ close: [] }>()
 
 const settings = useSettingsStore()
+
+function resolveIcon(name: string): Component {
+  return (LucideIcons as unknown as Record<string, Component>)[name] ?? LucideIcons.CircleDot
+}
+
+// ─── Formulaire ajout filtre custom ──────────────────────────────────────────
+
+const showAddForm = ref(false)
+const newLabel = ref('')
+const newQuery = ref('')
+const newIcon = ref('MapPin')
+const newColor = ref('#8b5cf6')
+
+const PRESET_COLORS = [
+  '#ef4444', '#f97316', '#f59e0b', '#22c55e', '#06b6d4',
+  '#3b82f6', '#6366f1', '#8b5cf6', '#ec4899', '#64748b',
+]
+
+const COMMON_ICONS = [
+  'MapPin', 'Heart', 'Star', 'Flame', 'Zap', 'Shield',
+  'Eye', 'Flag', 'Bell', 'Camera', 'Music', 'Coffee',
+  'Wifi', 'Phone', 'Mail', 'Home', 'Car', 'Bike',
+  'TreePine', 'Mountain', 'Waves', 'Sun', 'Leaf', 'Dog',
+]
+
+function addFilter(): void {
+  if (!newLabel.value.trim() || !newQuery.value.trim()) return
+  settings.addCustomFilter({
+    label: newLabel.value.trim(),
+    query: newQuery.value.trim(),
+    icon: newIcon.value,
+    color: newColor.value,
+  })
+  newLabel.value = ''
+  newQuery.value = ''
+  newIcon.value = 'MapPin'
+  newColor.value = '#8b5cf6'
+  showAddForm.value = false
+}
 </script>
 
 <template>
@@ -107,6 +150,151 @@ const settings = useSettingsStore()
               </div>
             </div>
 
+            <!-- ─── Filtres rapides ─── -->
+            <div>
+              <div class="flex items-center justify-between mb-1">
+                <div>
+                  <label class="setting-label">Filtres rapides</label>
+                  <p class="text-[10px] text-slate-600 mt-0.5">Activer/désactiver ou créer des filtres custom</p>
+                </div>
+                <button
+                  @click="showAddForm = !showAddForm"
+                  class="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium transition-colors"
+                  :style="`color:var(--accent-500)`"
+                >
+                  <Plus class="w-3 h-3" />
+                  Créer
+                </button>
+              </div>
+
+              <!-- Formulaire d'ajout -->
+              <Transition name="expand-form">
+                <div v-if="showAddForm" class="mb-3 p-3 bg-surface rounded-lg border border-surface-border space-y-2.5">
+                  <div>
+                    <label class="text-[9px] uppercase tracking-wider text-slate-600">Nom</label>
+                    <input
+                      v-model="newLabel"
+                      placeholder="Ex: Boulangeries"
+                      class="w-full mt-1 px-2.5 py-1.5 bg-surface-raised border border-surface-border rounded-md
+                             text-[11px] text-slate-200 placeholder-slate-600
+                             focus:outline-none focus:border-[var(--accent-500)] transition-colors"
+                    />
+                  </div>
+                  <div>
+                    <label class="text-[9px] uppercase tracking-wider text-slate-600">Recherche OSM</label>
+                    <input
+                      v-model="newQuery"
+                      placeholder="Ex: Boulangerie, wheelchair:yes, brand:Leclerc…"
+                      class="w-full mt-1 px-2.5 py-1.5 bg-surface-raised border border-surface-border rounded-md
+                             text-[11px] text-slate-200 placeholder-slate-600
+                             focus:outline-none focus:border-[var(--accent-500)] transition-colors"
+                    />
+                    <p class="text-[9px] text-slate-600 mt-1">Catégorie connue, texte libre, ou propriété:valeur</p>
+                  </div>
+                  <div>
+                    <label class="text-[9px] uppercase tracking-wider text-slate-600">Icône</label>
+                    <div class="flex flex-wrap gap-1 mt-1">
+                      <button
+                        v-for="ic in COMMON_ICONS"
+                        :key="ic"
+                        @click="newIcon = ic"
+                        class="w-7 h-7 rounded-md flex items-center justify-center transition-all"
+                        :class="newIcon === ic
+                          ? 'bg-surface-overlay text-slate-100 ring-1 ring-[var(--accent-500)]'
+                          : 'text-slate-500 hover:text-slate-300 hover:bg-surface-overlay'"
+                      >
+                        <component :is="resolveIcon(ic)" class="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                  <div>
+                    <label class="text-[9px] uppercase tracking-wider text-slate-600">Couleur</label>
+                    <div class="flex gap-1.5 mt-1">
+                      <button
+                        v-for="c in PRESET_COLORS"
+                        :key="c"
+                        @click="newColor = c"
+                        class="w-5 h-5 rounded-full border-2 transition-all"
+                        :class="newColor === c ? 'border-white scale-110' : 'border-transparent hover:scale-105'"
+                        :style="`background-color:${c}`"
+                      />
+                    </div>
+                  </div>
+                  <div class="flex justify-end gap-2 pt-1">
+                    <button
+                      @click="showAddForm = false"
+                      class="px-3 py-1.5 rounded-md text-[10px] text-slate-500 hover:text-slate-300 transition-colors"
+                    >Annuler</button>
+                    <button
+                      @click="addFilter"
+                      :disabled="!newLabel.trim() || !newQuery.trim()"
+                      class="px-3 py-1.5 rounded-md text-[10px] font-medium text-white transition-colors
+                             disabled:opacity-40 disabled:cursor-not-allowed"
+                      :style="`background-color:var(--accent-600)`"
+                    >Ajouter</button>
+                  </div>
+                </div>
+              </Transition>
+
+              <!-- Liste des filtres -->
+              <div class="space-y-1 max-h-52 overflow-y-auto">
+                <!-- Built-in -->
+                <button
+                  v-for="qf in QUICK_FILTERS"
+                  :key="qf.id"
+                  @click="settings.toggleQuickFilterVisibility(qf.id)"
+                  class="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg border transition-all duration-150"
+                  :class="settings.isQuickFilterEnabled(qf.id)
+                    ? 'border-surface-border bg-surface-overlay/50 text-slate-200'
+                    : 'border-transparent bg-transparent text-slate-600'"
+                >
+                  <component
+                    :is="resolveIcon(qf.icon)"
+                    class="w-3.5 h-3.5 flex-shrink-0"
+                    :style="settings.isQuickFilterEnabled(qf.id) ? `color:${qf.color}` : ''"
+                  />
+                  <span class="text-[11px] flex-1 text-left">{{ qf.label }}</span>
+                  <span
+                    class="flex-shrink-0 inline-flex items-center w-7 h-4 rounded-full p-0.5 transition-colors duration-200"
+                    :style="settings.isQuickFilterEnabled(qf.id)
+                      ? `background-color:${qf.color}`
+                      : 'background-color:#2a3045'"
+                  >
+                    <span
+                      class="block w-3 h-3 rounded-full bg-white shadow-sm transition-transform duration-200"
+                      :class="settings.isQuickFilterEnabled(qf.id) ? 'translate-x-3' : 'translate-x-0'"
+                    />
+                  </span>
+                </button>
+
+                <!-- Custom -->
+                <div
+                  v-for="cqf in settings.customQuickFilters"
+                  :key="cqf.id"
+                  class="flex items-center gap-2.5 px-3 py-2 rounded-lg border border-dashed border-surface-border
+                         bg-surface-overlay/30 text-slate-200"
+                >
+                  <component
+                    :is="resolveIcon(cqf.icon)"
+                    class="w-3.5 h-3.5 flex-shrink-0"
+                    :style="`color:${cqf.color}`"
+                  />
+                  <div class="flex-1 min-w-0 text-left">
+                    <p class="text-[11px] truncate">{{ cqf.label }}</p>
+                    <p class="text-[9px] text-slate-500 truncate">{{ cqf.query }}</p>
+                  </div>
+                  <button
+                    @click="settings.removeCustomFilter(cqf.id)"
+                    class="flex-shrink-0 w-5 h-5 flex items-center justify-center rounded
+                           text-slate-600 hover:text-red-400 transition-colors"
+                    title="Supprimer"
+                  >
+                    <Trash2 class="w-3 h-3" />
+                  </button>
+                </div>
+              </div>
+            </div>
+
             <!-- ─── Mode compact ─── -->
             <div class="flex items-center justify-between">
               <div>
@@ -203,6 +391,19 @@ const settings = useSettingsStore()
 .modal-leave-to > div:last-child {
   transform: scale(0.95);
   opacity: 0;
+}
+
+.expand-form-enter-active, .expand-form-leave-active {
+  transition: max-height 0.25s ease, opacity 0.2s ease;
+  overflow: hidden;
+}
+.expand-form-enter-from, .expand-form-leave-to {
+  max-height: 0;
+  opacity: 0;
+}
+.expand-form-enter-to, .expand-form-leave-from {
+  max-height: 400px;
+  opacity: 1;
 }
 
 /* Couleurs d'accent pour les boutons */

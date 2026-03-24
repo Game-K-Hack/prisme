@@ -11,7 +11,7 @@ import type { Component } from 'vue'
 import MapEngine from '@/components/MapEngine.vue'
 import SettingsModal from '@/components/SettingsModal.vue'
 import PluginsModal from '@/components/PluginsModal.vue'
-import { usePluginStore, QUICK_FILTERS, MAP_LAYER_CONTROLS } from '@/store/pluginStore'
+import { usePluginStore, MAP_LAYER_CONTROLS } from '@/store/pluginStore'
 import { useSettingsStore } from '@/store/settingsStore'
 import { PLUGIN_CATALOG } from '@/plugins/registry'
 
@@ -90,7 +90,7 @@ function resolveIcon(name: string): Component {
 }
 
 // Exposer les constantes au template
-const quickFilters = QUICK_FILTERS
+const quickFilters = computed(() => settings.visibleQuickFilters)
 const mapLayerControls = MAP_LAYER_CONTROLS
 </script>
 
