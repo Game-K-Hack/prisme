@@ -8,17 +8,338 @@ export interface SelectedFeature {
   properties: Record<string, unknown>
 }
 
+// ─── Système de recherche POI ────────────────────────────────────────────────
+
+export interface POICategory {
+  label: string
+  tag: string       // Filtre Overpass (ex: '["amenity"="bench"]')
+  group: string     // Groupe parent pour l'affichage
+  icon?: string     // Emoji pour les résultats
+}
+
+const POI_CATEGORIES: POICategory[] = [
+  // Restauration
+  { label: 'Restaurant',          tag: '["amenity"="restaurant"]',     group: 'Restauration', icon: '🍽️' },
+  { label: 'Café',                tag: '["amenity"="cafe"]',           group: 'Restauration', icon: '☕' },
+  { label: 'Fast-food',           tag: '["amenity"="fast_food"]',      group: 'Restauration', icon: '🍔' },
+  { label: 'Bar',                 tag: '["amenity"="bar"]',            group: 'Restauration', icon: '🍺' },
+  { label: 'Pub',                 tag: '["amenity"="pub"]',            group: 'Restauration', icon: '🍻' },
+  { label: 'Glacier',             tag: '["amenity"="ice_cream"]',      group: 'Restauration', icon: '🍦' },
+
+  // Santé
+  { label: 'Hôpital',             tag: '["amenity"="hospital"]',       group: 'Santé', icon: '🏥' },
+  { label: 'Pharmacie',           tag: '["amenity"="pharmacy"]',       group: 'Santé', icon: '💊' },
+  { label: 'Clinique',            tag: '["amenity"="clinic"]',         group: 'Santé', icon: '🏨' },
+  { label: 'Médecin',             tag: '["amenity"="doctors"]',        group: 'Santé', icon: '👨‍⚕️' },
+  { label: 'Dentiste',            tag: '["amenity"="dentist"]',        group: 'Santé', icon: '🦷' },
+  { label: 'Vétérinaire',         tag: '["amenity"="veterinary"]',     group: 'Santé', icon: '🐾' },
+
+  // Éducation
+  { label: 'École',               tag: '["amenity"="school"]',         group: 'Éducation', icon: '🏫' },
+  { label: 'Université',          tag: '["amenity"="university"]',     group: 'Éducation', icon: '🎓' },
+  { label: 'Bibliothèque',        tag: '["amenity"="library"]',        group: 'Éducation', icon: '📚' },
+  { label: 'Collège / Lycée',     tag: '["amenity"="college"]',        group: 'Éducation', icon: '🏫' },
+
+  // Services financiers
+  { label: 'Banque',              tag: '["amenity"="bank"]',           group: 'Finances', icon: '🏦' },
+  { label: 'Distributeur',        tag: '["amenity"="atm"]',            group: 'Finances', icon: '💳' },
+  { label: 'Bureau de poste',     tag: '["amenity"="post_office"]',    group: 'Finances', icon: '📮' },
+
+  // Transports
+  { label: 'Parking',             tag: '["amenity"="parking"]',        group: 'Transports', icon: '🅿️' },
+  { label: 'Parking vélos',       tag: '["amenity"="bicycle_parking"]', group: 'Transports', icon: '🚲' },
+  { label: 'Borne de recharge',   tag: '["amenity"="charging_station"]', group: 'Transports', icon: '🔌' },
+  { label: 'Station-service',     tag: '["amenity"="fuel"]',           group: 'Transports', icon: '⛽' },
+  { label: 'Gare routière',       tag: '["amenity"="bus_station"]',    group: 'Transports', icon: '🚌' },
+  { label: 'Arrêt de bus',        tag: '["highway"="bus_stop"]',       group: 'Transports', icon: '🚏' },
+  { label: 'Gare',                tag: '["railway"="station"]',        group: 'Transports', icon: '🚉' },
+  { label: 'Taxi',                tag: '["amenity"="taxi"]',           group: 'Transports', icon: '🚕' },
+  { label: 'Vélo en libre-service', tag: '["amenity"="bicycle_rental"]', group: 'Transports', icon: '🚲' },
+
+  // Services publics
+  { label: 'Police',              tag: '["amenity"="police"]',         group: 'Services publics', icon: '👮' },
+  { label: 'Pompiers',            tag: '["amenity"="fire_station"]',   group: 'Services publics', icon: '🚒' },
+  { label: 'Mairie',              tag: '["amenity"="townhall"]',       group: 'Services publics', icon: '🏛️' },
+  { label: 'Tribunal',            tag: '["amenity"="courthouse"]',     group: 'Services publics', icon: '⚖️' },
+
+  // Équipements
+  { label: 'Toilettes',           tag: '["amenity"="toilets"]',        group: 'Équipements', icon: '🚻' },
+  { label: 'Eau potable',         tag: '["amenity"="drinking_water"]', group: 'Équipements', icon: '🚰' },
+  { label: 'Banc',                tag: '["amenity"="bench"]',          group: 'Équipements', icon: '🪑' },
+  { label: 'Abri',                tag: '["amenity"="shelter"]',        group: 'Équipements', icon: '🛖' },
+  { label: 'Fontaine',            tag: '["amenity"="fountain"]',       group: 'Équipements', icon: '⛲' },
+  { label: 'Poubelle',            tag: '["amenity"="waste_basket"]',   group: 'Équipements', icon: '🗑️' },
+  { label: 'Recyclage',           tag: '["amenity"="recycling"]',      group: 'Équipements', icon: '♻️' },
+  { label: 'Téléphone public',    tag: '["amenity"="telephone"]',      group: 'Équipements', icon: '📞' },
+
+  // Culture & Loisirs
+  { label: 'Cinéma',              tag: '["amenity"="cinema"]',         group: 'Culture', icon: '🎬' },
+  { label: 'Théâtre',             tag: '["amenity"="theatre"]',        group: 'Culture', icon: '🎭' },
+  { label: 'Salle de concert',    tag: '["amenity"="music_venue"]',    group: 'Culture', icon: '🎵' },
+  { label: 'Centre culturel',     tag: '["amenity"="arts_centre"]',    group: 'Culture', icon: '🎨' },
+  { label: 'Lieu de culte',       tag: '["amenity"="place_of_worship"]', group: 'Culture', icon: '⛪' },
+
+  // Commerces
+  { label: 'Supermarché',         tag: '["shop"="supermarket"]',       group: 'Commerces', icon: '🛒' },
+  { label: 'Boulangerie',         tag: '["shop"="bakery"]',            group: 'Commerces', icon: '🥖' },
+  { label: 'Boucherie',           tag: '["shop"="butcher"]',           group: 'Commerces', icon: '🥩' },
+  { label: 'Primeur',             tag: '["shop"="greengrocer"]',       group: 'Commerces', icon: '🥬' },
+  { label: 'Caviste',             tag: '["shop"="wine"]',              group: 'Commerces', icon: '🍷' },
+  { label: 'Épicerie',            tag: '["shop"="convenience"]',       group: 'Commerces', icon: '🏪' },
+  { label: 'Fleuriste',           tag: '["shop"="florist"]',           group: 'Commerces', icon: '💐' },
+  { label: 'Coiffeur',            tag: '["shop"="hairdresser"]',       group: 'Commerces', icon: '✂️' },
+  { label: 'Opticien',            tag: '["shop"="optician"]',          group: 'Commerces', icon: '👓' },
+  { label: 'Librairie',           tag: '["shop"="books"]',             group: 'Commerces', icon: '📖' },
+  { label: 'Presse',              tag: '["shop"="newsagent"]',         group: 'Commerces', icon: '📰' },
+  { label: 'Vêtements',           tag: '["shop"="clothes"]',           group: 'Commerces', icon: '👕' },
+  { label: 'Chaussures',          tag: '["shop"="shoes"]',             group: 'Commerces', icon: '👟' },
+  { label: 'Bricolage',           tag: '["shop"="doityourself"]',      group: 'Commerces', icon: '🔨' },
+  { label: 'Informatique',        tag: '["shop"="computer"]',          group: 'Commerces', icon: '💻' },
+  { label: 'Téléphonie',          tag: '["shop"="mobile_phone"]',      group: 'Commerces', icon: '📱' },
+  { label: 'Sport',               tag: '["shop"="sports"]',            group: 'Commerces', icon: '⚽' },
+  { label: 'Vélociste',           tag: '["shop"="bicycle"]',           group: 'Commerces', icon: '🚴' },
+  { label: 'Laverie',             tag: '["shop"="laundry"]',           group: 'Commerces', icon: '🧺' },
+  { label: 'Cadeaux',             tag: '["shop"="gift"]',              group: 'Commerces', icon: '🎁' },
+  { label: 'Friperie',            tag: '["shop"="second_hand"]',       group: 'Commerces', icon: '👗' },
+  { label: 'Auto-réparation',     tag: '["shop"="car_repair"]',        group: 'Commerces', icon: '🔧' },
+  { label: 'Pneus',               tag: '["shop"="tyres"]',             group: 'Commerces', icon: '🛞' },
+
+  // Tourisme
+  { label: 'Hôtel',               tag: '["tourism"="hotel"]',          group: 'Tourisme', icon: '🏨' },
+  { label: 'Chambre d\'hôte',     tag: '["tourism"="guest_house"]',    group: 'Tourisme', icon: '🛏️' },
+  { label: 'Auberge de jeunesse', tag: '["tourism"="hostel"]',         group: 'Tourisme', icon: '🏠' },
+  { label: 'Camping',             tag: '["tourism"="camp_site"]',      group: 'Tourisme', icon: '⛺' },
+  { label: 'Musée',               tag: '["tourism"="museum"]',         group: 'Tourisme', icon: '🏛️' },
+  { label: 'Galerie d\'art',      tag: '["tourism"="gallery"]',        group: 'Tourisme', icon: '🖼️' },
+  { label: 'Zoo',                 tag: '["tourism"="zoo"]',            group: 'Tourisme', icon: '🦁' },
+  { label: 'Point de vue',        tag: '["tourism"="viewpoint"]',      group: 'Tourisme', icon: '👁️' },
+  { label: 'Aire de pique-nique', tag: '["tourism"="picnic_site"]',    group: 'Tourisme', icon: '🧺' },
+  { label: 'Info tourisme',       tag: '["tourism"="information"]',    group: 'Tourisme', icon: 'ℹ️' },
+
+  // Loisirs
+  { label: 'Parc',                tag: '["leisure"="park"]',           group: 'Loisirs', icon: '🌳' },
+  { label: 'Aire de jeux',        tag: '["leisure"="playground"]',     group: 'Loisirs', icon: '🛝' },
+  { label: 'Piscine',             tag: '["leisure"="swimming_pool"]',  group: 'Loisirs', icon: '🏊' },
+  { label: 'Centre sportif',      tag: '["leisure"="sports_centre"]',  group: 'Loisirs', icon: '🏋️' },
+  { label: 'Salle de fitness',    tag: '["leisure"="fitness_centre"]', group: 'Loisirs', icon: '💪' },
+  { label: 'Terrain de sport',    tag: '["leisure"="pitch"]',          group: 'Loisirs', icon: '⚽' },
+  { label: 'Stade',               tag: '["leisure"="stadium"]',        group: 'Loisirs', icon: '🏟️' },
+  { label: 'Golf',                tag: '["leisure"="golf_course"]',    group: 'Loisirs', icon: '⛳' },
+  { label: 'Bowling',             tag: '["leisure"="bowling_alley"]',  group: 'Loisirs', icon: '🎳' },
+  { label: 'Patinoire',           tag: '["leisure"="ice_rink"]',       group: 'Loisirs', icon: '⛸️' },
+  { label: 'Parc aquatique',      tag: '["leisure"="water_park"]',     group: 'Loisirs', icon: '🌊' },
+  { label: 'Jardin',              tag: '["leisure"="garden"]',         group: 'Loisirs', icon: '🌻' },
+  { label: 'Parc pour chiens',    tag: '["leisure"="dog_park"]',       group: 'Loisirs', icon: '🐕' },
+  { label: 'Escape game',         tag: '["leisure"="escape_game"]',    group: 'Loisirs', icon: '🔑' },
+  { label: 'Centre équestre',     tag: '["leisure"="horse_riding"]',   group: 'Loisirs', icon: '🐴' },
+  { label: 'Réserve naturelle',   tag: '["leisure"="nature_reserve"]', group: 'Loisirs', icon: '🌿' },
+
+  // Urgence & Sécurité
+  { label: 'Défibrillateur',      tag: '["emergency"="defibrillator"]',  group: 'Urgence', icon: '🫀' },
+  { label: 'Borne incendie',      tag: '["emergency"="fire_hydrant"]',   group: 'Urgence', icon: '🧯' },
+  { label: 'Poste de secours',    tag: '["emergency"="first_aid"]',      group: 'Urgence', icon: '🩹' },
+  { label: 'Sirène',              tag: '["emergency"="siren"]',          group: 'Urgence', icon: '🔔' },
+  { label: 'Extincteur',          tag: '["emergency"="fire_extinguisher"]', group: 'Urgence', icon: '🧯' },
+
+  // Infrastructure & Réseaux
+  { label: 'Boîte aux lettres',   tag: '["amenity"="post_box"]',         group: 'Infrastructure', icon: '📮' },
+  { label: 'Antenne télécom',     tag: '["man_made"="mast"]["tower:type"="communication"]', group: 'Infrastructure', icon: '📡' },
+  { label: 'Éolienne',            tag: '["generator:source"="wind"]',    group: 'Infrastructure', icon: '🌬️' },
+  { label: 'Panneau solaire',     tag: '["generator:source"="solar"]',   group: 'Infrastructure', icon: '☀️' },
+  { label: 'Château d\'eau',      tag: '["man_made"="water_tower"]',     group: 'Infrastructure', icon: '🏗️' },
+  { label: 'Sous-station élec.',  tag: '["power"="substation"]',         group: 'Infrastructure', icon: '⚡' },
+  { label: 'Station de mesure',   tag: '["man_made"="monitoring_station"]', group: 'Infrastructure', icon: '📊' },
+  { label: 'Caméra surveillance', tag: '["man_made"="surveillance"]',    group: 'Infrastructure', icon: '📹' },
+
+  // Nature & Environnement
+  { label: 'Arbre remarquable',   tag: '["natural"="tree"]["denotation"="natural_monument"]', group: 'Nature', icon: '🌳' },
+  { label: 'Source d\'eau',       tag: '["natural"="spring"]',           group: 'Nature', icon: '💧' },
+  { label: 'Sommet',              tag: '["natural"="peak"]',             group: 'Nature', icon: '⛰️' },
+  { label: 'Grotte',              tag: '["natural"="cave_entrance"]',    group: 'Nature', icon: '🕳️' },
+  { label: 'Cascade',             tag: '["waterway"="waterfall"]',       group: 'Nature', icon: '💦' },
+  { label: 'Plage',               tag: '["natural"="beach"]',            group: 'Nature', icon: '🏖️' },
+
+  // Patrimoine
+  { label: 'Monument historique', tag: '["heritage"]',                   group: 'Patrimoine', icon: '🏰' },
+  { label: 'Ruine',               tag: '["historic"="ruins"]',           group: 'Patrimoine', icon: '🏚️' },
+  { label: 'Château',             tag: '["historic"="castle"]',          group: 'Patrimoine', icon: '🏰' },
+  { label: 'Mémorial',            tag: '["historic"="memorial"]',        group: 'Patrimoine', icon: '🪦' },
+  { label: 'Site archéologique',  tag: '["historic"="archaeological_site"]', group: 'Patrimoine', icon: '🏺' },
+  { label: 'Moulin',              tag: '["man_made"="windmill"]',        group: 'Patrimoine', icon: '🌾' },
+  { label: 'Phare',               tag: '["man_made"="lighthouse"]',      group: 'Patrimoine', icon: '🗼' },
+]
+
+// Filtres de propriétés OSM pour la recherche avancée
+// Syntaxe utilisateur : "propriété:valeur" (ex: "wheelchair:yes", "brand:Leclerc")
+const PROPERTY_FILTERS: Record<string, string> = {
+  'wheelchair':   'wheelchair',
+  'accessible':   'wheelchair',
+  'pmr':          'wheelchair',
+  'brand':        'brand',
+  'marque':       'brand',
+  'phone':        'phone',
+  'téléphone':    'phone',
+  'tel':          'phone',
+  'email':        'email',
+  'mail':         'email',
+  'website':      'website',
+  'site':         'website',
+  'wifi':         'internet_access',
+  'internet':     'internet_access',
+  'cuisine':      'cuisine',
+  'ouvert':       'opening_hours',
+  'horaires':     'opening_hours',
+  'drive':        'drive_through',
+  'bio':          'organic',
+  'vegan':        'diet:vegan',
+  'végétarien':   'diet:vegetarian',
+  'halal':        'diet:halal',
+  'casher':       'diet:kosher',
+  'fumeur':       'smoking',
+  'terrasse':     'outdoor_seating',
+  'livraison':    'delivery',
+}
+
+// Filtres rapides : overlays utilitaires en un clic
+export interface QuickFilter {
+  id: string
+  label: string
+  icon: string
+  category: string  // Label dans POI_CATEGORIES
+  color: string
+}
+
+export const QUICK_FILTERS: QuickFilter[] = [
+  { id: 'qf_defib',     label: 'Défibrillateurs',   icon: '🫀', category: 'Défibrillateur',    color: '#ef4444' },
+  { id: 'qf_charging',  label: 'Bornes recharge',   icon: '🔌', category: 'Borne de recharge', color: '#22c55e' },
+  { id: 'qf_water',     label: 'Eau potable',       icon: '🚰', category: 'Eau potable',       color: '#06b6d4' },
+  { id: 'qf_toilets',   label: 'Toilettes',         icon: '🚻', category: 'Toilettes',         color: '#a855f7' },
+  { id: 'qf_bench',     label: 'Bancs',             icon: '🪑', category: 'Banc',              color: '#f59e0b' },
+  { id: 'qf_hydrant',   label: 'Bornes incendie',   icon: '🧯', category: 'Borne incendie',    color: '#f43f5e' },
+  { id: 'qf_postbox',   label: 'Boîtes aux lettres', icon: '📮', category: 'Boîte aux lettres', color: '#eab308' },
+  { id: 'qf_monument',  label: 'Patrimoine',        icon: '🏰', category: 'Monument historique', color: '#d97706' },
+  { id: 'qf_viewpoint', label: 'Points de vue',     icon: '👁️', category: 'Point de vue',      color: '#0ea5e9' },
+  { id: 'qf_peak',      label: 'Sommets',           icon: '⛰️', category: 'Sommet',            color: '#64748b' },
+  { id: 'qf_pharmacy',  label: 'Pharmacies',        icon: '💊', category: 'Pharmacie',         color: '#16a34a' },
+  { id: 'qf_wifi',      label: 'WiFi gratuit',      icon: '📶', category: 'wifi_custom',       color: '#6366f1' },
+]
+
+// Catégories de couches carte pour contrôler la visibilité
+export interface MapLayerControl {
+  id: string
+  label: string
+  icon: string
+  /** Fonction de test : retourne true si un layer MapLibre appartient à cette catégorie */
+  match: (layerId: string, layerType: string) => boolean
+}
+
+export const MAP_LAYER_CONTROLS: MapLayerControl[] = [
+  {
+    id: 'labels',
+    label: 'Noms des lieux',
+    icon: '🏷️',
+    match: (_id, type) => type === 'symbol',
+  },
+  {
+    id: 'buildings',
+    label: 'Bâtiments',
+    icon: '🏢',
+    match: (id, type) => (type === 'fill' || type === 'fill-extrusion') && /building/i.test(id),
+  },
+  {
+    id: 'roads',
+    label: 'Routes',
+    icon: '🛣️',
+    match: (id, type) => type === 'line' && /road|highway|street|bridge|tunnel|path|track|motorway|trunk|primary|secondary|tertiary/i.test(id),
+  },
+  {
+    id: 'water',
+    label: 'Eau & rivières',
+    icon: '💧',
+    match: (id, type) => (type === 'fill' || type === 'line') && /water|river|lake|ocean|sea|stream|canal/i.test(id),
+  },
+  {
+    id: 'landuse',
+    label: 'Espaces verts',
+    icon: '🌿',
+    match: (id, type) => type === 'fill' && /land|park|forest|wood|grass|garden|green|nature|scrub|farm/i.test(id),
+  },
+  {
+    id: 'boundaries',
+    label: 'Frontières',
+    icon: '🗺️',
+    match: (id, type) => type === 'line' && /boundary|border|admin/i.test(id),
+  },
+  {
+    id: 'transit',
+    label: 'Transport',
+    icon: '🚆',
+    match: (id, type) => (type === 'line' || type === 'symbol') && /rail|transit|ferry|subway|tram/i.test(id),
+  },
+]
+
+// Couleurs cycliques pour différencier les recherches simultanées
+const POI_COLORS = [
+  '#8b5cf6', '#ec4899', '#06b6d4', '#f59e0b',
+  '#10b981', '#f43f5e', '#3b82f6', '#a855f7',
+]
+
+export interface POISearchResult {
+  id: string            // Identifiant unique (timestamp)
+  query: string         // Requête d'origine
+  icon: string          // Emoji de la catégorie
+  color: string         // Couleur de la couche
+  count: number         // Nombre de résultats
+  sourceId: string      // ID source MapLibre
+  circleLayerId: string // ID layer cercle
+  labelLayerId: string  // ID layer label
+}
+
+// ─── Store ───────────────────────────────────────────────────────────────────
+
 export const usePluginStore = defineStore('plugins', () => {
+  // ─── Plugins ───────────────────────────────────────────────────────────────
   const registry = ref<Map<string, FranceDataPlugin>>(new Map())
   const activeIds = ref<Set<string>>(new Set())
   const mapInstance = ref<MapLibreMap | null>(null)
   const selectedFeature = ref<SelectedFeature | null>(null)
 
+  // ─── Contrôles carte ───────────────────────────────────────────────────────
+  const labelsVisible = ref(true)
+  const poiLoading = ref(false)
+  const poiSearches = ref<POISearchResult[]>([])
+  const poiWarning = ref('')
+  let poiAbortController: AbortController | null = null
+
+  // Visibilité des couches carte (toutes visibles par défaut)
+  const mapLayerVisibility = ref<Record<string, boolean>>(
+    Object.fromEntries(MAP_LAYER_CONTROLS.map(c => [c.id, true]))
+  )
+
+  // Quick filters actifs (id du filtre → id dans poiSearches)
+  const activeQuickFilters = ref<Map<string, string>>(new Map())
+
+  // ─── Computed ──────────────────────────────────────────────────────────────
   const plugins = computed<FranceDataPlugin[]>(() =>
     Array.from(registry.value.values())
   )
-
   const isActive = (id: string): boolean => activeIds.value.has(id)
+
+  /** Catégories regroupées par section */
+  const poiGroups = computed(() => {
+    const groups = new Map<string, POICategory[]>()
+    for (const cat of POI_CATEGORIES) {
+      const list = groups.get(cat.group) ?? []
+      list.push(cat)
+      groups.set(cat.group, list)
+    }
+    return groups
+  })
+
+  /** Toutes les catégories (labels) pour recherche rapide */
+  const poiCategories = POI_CATEGORIES.map(c => c.label)
+
+  // ─── Actions plugins ───────────────────────────────────────────────────────
 
   function registerPlugin(plugin: FranceDataPlugin): void {
     if (registry.value.has(plugin.id)) return
@@ -51,9 +372,7 @@ export const usePluginStore = defineStore('plugins', () => {
     if (!plugin || !activeIds.value.has(id)) return
     const map = mapInstance.value
     if (map && plugin.teardown) {
-      try {
-        plugin.teardown(map, usePluginStore())
-      } catch (err) {
+      try { plugin.teardown(map, usePluginStore()) } catch (err) {
         console.error(`[Prisme] Erreur teardown() plugin "${id}":`, err)
       }
     }
@@ -65,10 +384,300 @@ export const usePluginStore = defineStore('plugins', () => {
     activeIds.value.has(id) ? deactivatePlugin(id) : activatePlugin(id)
   }
 
+  // ─── Actions carte ─────────────────────────────────────────────────────────
+
+  /** Toggle la visibilité d'une catégorie de couches carte */
+  function toggleMapLayer(categoryId: string): void {
+    const map = mapInstance.value
+    if (!map) return
+    const control = MAP_LAYER_CONTROLS.find(c => c.id === categoryId)
+    if (!control) return
+
+    const newState = !mapLayerVisibility.value[categoryId]
+    mapLayerVisibility.value[categoryId] = newState
+    if (categoryId === 'labels') labelsVisible.value = newState
+
+    const style = map.getStyle()
+    if (!style?.layers) return
+    const vis = newState ? 'visible' : 'none'
+    for (const layer of style.layers) {
+      if (layer.id.startsWith('prisme_')) continue
+      if (control.match(layer.id, layer.type)) {
+        map.setLayoutProperty(layer.id, 'visibility', vis)
+      }
+    }
+  }
+
+  // Compat : garde toggleLabels comme raccourci
+  function toggleLabels(): void {
+    toggleMapLayer('labels')
+  }
+
+  /** Toggle un filtre rapide (ajoute ou retire la couche POI) */
+  function toggleQuickFilter(filterId: string): void {
+    const qf = QUICK_FILTERS.find(f => f.id === filterId)
+    if (!qf) return
+
+    const existingSearchId = activeQuickFilters.value.get(filterId)
+    if (existingSearchId) {
+      // Désactiver : retirer la couche
+      clearPOI(existingSearchId)
+      activeQuickFilters.value.delete(filterId)
+    } else {
+      // Activer : lancer la recherche
+      // On traite "wifi_custom" à part
+      const query = qf.category === 'wifi_custom' ? 'wifi:yes' : qf.category
+      searchPOI(query).then(() => {
+        // Retrouver le dernier résultat ajouté pour l'associer au quick filter
+        const last = poiSearches.value[poiSearches.value.length - 1]
+        if (last) activeQuickFilters.value.set(filterId, last.id)
+      })
+    }
+  }
+
+  function isQuickFilterActive(filterId: string): boolean {
+    return activeQuickFilters.value.has(filterId)
+  }
+
+  /** Supprime une recherche spécifique ou toutes */
+  function clearPOI(searchId?: string): void {
+    const map = mapInstance.value
+    if (!map) return
+
+    const toRemove = searchId
+      ? poiSearches.value.filter(s => s.id === searchId)
+      : [...poiSearches.value]
+
+    for (const s of toRemove) {
+      if (map.getLayer(s.labelLayerId)) map.removeLayer(s.labelLayerId)
+      if (map.getLayer(s.circleLayerId)) map.removeLayer(s.circleLayerId)
+      if (map.getSource(s.sourceId)) map.removeSource(s.sourceId)
+    }
+
+    if (searchId) {
+      poiSearches.value = poiSearches.value.filter(s => s.id !== searchId)
+    } else {
+      poiSearches.value = []
+    }
+    poiWarning.value = ''
+  }
+
+  /**
+   * Analyse la requête et construit le filtre Overpass adapté.
+   *
+   * Syntaxes supportées :
+   *   - Catégorie connue : "Boulangerie" → tag OSM direct
+   *   - Propriété:valeur  : "wheelchair:yes" → filtre par propriété OSM
+   *   - Texte libre       : "Leclerc" → recherche par nom
+   *   - Combiné           : "restaurant wheelchair:yes" → restaurants accessibles
+   */
+  function buildOverpassFilter(query: string): { tag: string; icon: string } {
+    const parts = query.trim().split(/\s+/)
+    const tagParts: string[] = []
+    const textParts: string[] = []
+    let icon = '📍'
+
+    for (const part of parts) {
+      // Vérifie si c'est un filtre propriété:valeur
+      const colonIdx = part.indexOf(':')
+      if (colonIdx > 0) {
+        const key = part.slice(0, colonIdx).toLowerCase()
+        const val = part.slice(colonIdx + 1)
+        const osmKey = PROPERTY_FILTERS[key]
+        if (osmKey) {
+          tagParts.push(`["${osmKey}"="${val}"]`)
+          continue
+        }
+      }
+      textParts.push(part)
+    }
+
+    const textQuery = textParts.join(' ')
+
+    // Vérifie si le texte correspond à une catégorie connue
+    if (textQuery) {
+      const lowerText = textQuery.toLowerCase()
+      const match = POI_CATEGORIES.find(c => c.label.toLowerCase() === lowerText)
+      if (match) {
+        tagParts.unshift(match.tag)
+        icon = match.icon ?? '📍'
+      } else {
+        // Recherche par nom en texte libre
+        tagParts.unshift(`["name"~"${textQuery}",i]`)
+      }
+    }
+
+    return { tag: tagParts.join(''), icon }
+  }
+
+  // Bbox France métropolitaine pour fallback
+  const FRANCE_BBOX = '41.3,-5.2,51.1,9.6'
+  const MAX_VIEWPORT_AREA = 25 // degrés² — au-delà on prévient l'utilisateur
+
+  async function searchPOI(query: string): Promise<void> {
+    const map = mapInstance.value
+    if (!map || !query.trim()) return
+
+    // Vérifier si cette requête existe déjà
+    if (poiSearches.value.some(s => s.query.toLowerCase() === query.toLowerCase())) return
+
+    poiAbortController = new AbortController()
+    poiLoading.value = true
+    poiWarning.value = ''
+
+    const bounds = map.getBounds()
+    const viewportArea =
+      (bounds.getNorth() - bounds.getSouth()) * (bounds.getEast() - bounds.getWest())
+
+    let bbox: string
+    if (viewportArea > MAX_VIEWPORT_AREA) {
+      bbox = FRANCE_BBOX
+      poiWarning.value = 'Vue trop large — recherche limitée à la France métropolitaine. Zoomez pour des résultats locaux.'
+    } else {
+      bbox = `${bounds.getSouth()},${bounds.getWest()},${bounds.getNorth()},${bounds.getEast()}`
+    }
+
+    const { tag, icon } = buildOverpassFilter(query)
+    const searchId = `poi_${Date.now()}`
+    const color = POI_COLORS[poiSearches.value.length % POI_COLORS.length]
+    const sourceId = `prisme_${searchId}_src`
+    const circleLayerId = `prisme_${searchId}_circle`
+    const labelLayerId = `prisme_${searchId}_label`
+
+    const overpassQuery =
+      `[out:json][timeout:25];(node${tag}(${bbox});way${tag}(${bbox}););out center 500;`
+
+    try {
+      const res = await fetch('https://overpass-api.de/api/interpreter', {
+        method: 'POST',
+        body: `data=${encodeURIComponent(overpassQuery)}`,
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        signal: poiAbortController.signal,
+      })
+      const data = await res.json()
+
+      type OverpassElement = {
+        lon?: number; lat?: number
+        center?: { lon: number; lat: number }
+        tags?: Record<string, string>
+      }
+
+      const features: GeoJSON.Feature[] = data.elements
+        .filter((el: OverpassElement) => el.lat != null || el.center != null)
+        .map((el: OverpassElement) => ({
+          type: 'Feature' as const,
+          geometry: {
+            type: 'Point' as const,
+            coordinates: [el.lon ?? el.center!.lon, el.lat ?? el.center!.lat],
+          },
+          properties: {
+            name: el.tags?.name ?? query,
+            brand: el.tags?.brand ?? '',
+            wheelchair: el.tags?.wheelchair ?? '',
+            phone: el.tags?.phone ?? '',
+            website: el.tags?.website ?? '',
+            opening_hours: el.tags?.opening_hours ?? '',
+          },
+        }))
+
+      map.addSource(sourceId, {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features },
+      })
+
+      map.addLayer({
+        id: circleLayerId,
+        type: 'circle',
+        source: sourceId,
+        paint: {
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 5, 3, 10, 6, 14, 10],
+          'circle-color': color,
+          'circle-opacity': 0.85,
+          'circle-stroke-width': 1.5,
+          'circle-stroke-color': '#ffffff',
+          'circle-stroke-opacity': 0.6,
+        },
+      })
+
+      map.addLayer({
+        id: labelLayerId,
+        type: 'symbol',
+        source: sourceId,
+        minzoom: 12,
+        layout: {
+          'text-field': ['get', 'name'],
+          'text-font': ['Open Sans Semibold', 'Arial Unicode MS Bold'],
+          'text-size': 10,
+          'text-offset': [0, 1.3],
+          'text-anchor': 'top',
+          'text-max-width': 8,
+        },
+        paint: {
+          'text-color': '#ddd6fe',
+          'text-halo-color': '#0f1117',
+          'text-halo-width': 1.2,
+        },
+      })
+
+      poiSearches.value.push({
+        id: searchId,
+        query,
+        icon,
+        color,
+        count: features.length,
+        sourceId,
+        circleLayerId,
+        labelLayerId,
+      })
+
+      // Auto-zoom sur les résultats
+      if (features.length > 0) {
+        let minLng = Infinity, minLat = Infinity, maxLng = -Infinity, maxLat = -Infinity
+        for (const f of features) {
+          const [lng, lat] = (f.geometry as GeoJSON.Point).coordinates
+          if (lng < minLng) minLng = lng
+          if (lng > maxLng) maxLng = lng
+          if (lat < minLat) minLat = lat
+          if (lat > maxLat) maxLat = lat
+        }
+        map.fitBounds(
+          [[minLng, minLat], [maxLng, maxLat]],
+          { padding: 80, maxZoom: 15, duration: 800 }
+        )
+      }
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return
+      console.error('[Prisme] Erreur recherche POI:', err)
+    } finally {
+      poiAbortController = null
+      poiLoading.value = false
+    }
+  }
+
+  function cancelPOISearch(): void {
+    if (poiAbortController) {
+      poiAbortController.abort()
+      poiAbortController = null
+      poiLoading.value = false
+      poiWarning.value = ''
+    }
+  }
+
   return {
+    // Plugins
     registry, activeIds, mapInstance, selectedFeature,
     plugins, isActive,
     setMap, selectFeature, registerPlugin,
     activatePlugin, deactivatePlugin, togglePlugin,
+    // Carte — POI
+    poiLoading, poiSearches, poiWarning,
+    poiGroups, poiCategories,
+    searchPOI, clearPOI, cancelPOISearch,
+    // Carte — Quick filters
+    activeQuickFilters,
+    toggleQuickFilter, isQuickFilterActive,
+    // Carte — Couches
+    labelsVisible, mapLayerVisibility,
+    toggleLabels, toggleMapLayer,
   }
 })
