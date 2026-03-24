@@ -3,17 +3,11 @@ import { ref, onMounted, onBeforeUnmount } from 'vue'
 import maplibregl, { Map, NavigationControl, ScaleControl } from 'maplibre-gl'
 import { usePluginStore } from '@/store/pluginStore'
 
-// Expose maplibregl sur window pour les popups dans les plugins
-;(window as typeof window & { maplibregl: typeof maplibregl }).maplibregl = maplibregl
-
 const mapContainer = ref<HTMLDivElement | null>(null)
 let map: Map | null = null
-
 const pluginStore = usePluginStore()
 
-// Style vectoriel public (OpenFreeMap — aucune clé API requise)
 const MAP_STYLE = 'https://tiles.openfreemap.org/styles/liberty'
-
 const INITIAL_CENTER: [number, number] = [2.35, 46.8]
 const INITIAL_ZOOM = 5.5
 
@@ -31,17 +25,12 @@ onMounted(() => {
     attributionControl: false,
   })
 
-  // Contrôles natifs MapLibre
   map.addControl(new NavigationControl({ visualizePitch: true }), 'bottom-right')
   map.addControl(new ScaleControl({ unit: 'metric' }), 'bottom-left')
-  map.addControl(
-    new maplibregl.AttributionControl({ compact: true }),
-    'bottom-right'
-  )
+  map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-right')
 
   map.on('load', () => {
     if (!map) return
-    // Lie la carte au store pour que les plugins puissent y accéder
     pluginStore.setMap(map)
   })
 })
@@ -53,5 +42,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div ref="mapContainer" class="w-full h-full" />
+  <div class="absolute inset-0">
+    <div ref="mapContainer" class="w-full h-full" />
+  </div>
 </template>
