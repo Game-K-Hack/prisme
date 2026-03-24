@@ -301,6 +301,7 @@ export const usePluginStore = defineStore('plugins', () => {
   // ─── Plugins ───────────────────────────────────────────────────────────────
   const registry = ref<Map<string, FranceDataPlugin>>(new Map())
   const activeIds = ref<Set<string>>(new Set())
+  const externalPluginIds = ref<Set<string>>(new Set())
   const mapInstance = ref<MapLibreMap | null>(null)
   const selectedFeature = ref<SelectedFeature | null>(null)
 
@@ -341,17 +342,22 @@ export const usePluginStore = defineStore('plugins', () => {
 
   // ─── Actions plugins ───────────────────────────────────────────────────────
 
-  function registerPlugin(plugin: FranceDataPlugin): void {
+  function registerPlugin(plugin: FranceDataPlugin, isExternal = false): void {
     if (registry.value.has(plugin.id)) return
     registry.value.set(plugin.id, plugin)
+    if (isExternal) externalPluginIds.value.add(plugin.id)
     saveInstalledIds()
   }
 
   function unregisterPlugin(id: string): void {
-    // Désactiver d'abord si actif
     if (activeIds.value.has(id)) deactivatePlugin(id)
     registry.value.delete(id)
+    externalPluginIds.value.delete(id)
     saveInstalledIds()
+  }
+
+  function isExternalPlugin(id: string): boolean {
+    return externalPluginIds.value.has(id)
   }
 
   /** Persiste la liste des IDs installés dans localStorage */
@@ -690,7 +696,7 @@ export const usePluginStore = defineStore('plugins', () => {
     // Plugins
     registry, activeIds, mapInstance, selectedFeature,
     plugins, isActive,
-    setMap, selectFeature, registerPlugin, unregisterPlugin, getInstalledIds,
+    setMap, selectFeature, registerPlugin, unregisterPlugin, isExternalPlugin, getInstalledIds,
     activatePlugin, deactivatePlugin, togglePlugin,
     // Carte — POI
     poiLoading, poiSearches, poiWarning,

@@ -1,10 +1,18 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { X, Power, PowerOff, Info, ChevronRight, Plus, Minus, Package, Search } from 'lucide-vue-next'
+import {
+  X, Power, PowerOff, Info, ChevronRight, Plus, Minus, Package, Search,
+  Upload, Download, FileArchive, ExternalLink,
+} from 'lucide-vue-next'
 import * as LucideIcons from 'lucide-vue-next'
 import type { Component } from 'vue'
 import { usePluginStore } from '@/store/pluginStore'
 import { PLUGIN_CATALOG } from '@/plugins/registry'
+import {
+  extractPluginFile, compileExternalPlugin,
+  storeExternalPlugin, removeStoredPlugin,
+  generateTemplatePrm,
+} from '@/plugins/externalLoader'
 
 defineProps<{ open: boolean }>()
 const emit = defineEmits<{ close: [] }>()
@@ -13,6 +21,9 @@ const pluginStore = usePluginStore()
 const expandedPlugin = ref<string | null>(null)
 const activeTab = ref<'installed' | 'catalog'>('installed')
 const searchQuery = ref('')
+const importError = ref('')
+const importLoading = ref(false)
+const fileInput = ref<HTMLInputElement | null>(null)
 
 function resolveIcon(name: string): Component {
   return (LucideIcons as unknown as Record<string, Component>)[name] ?? LucideIcons.CircleDot
@@ -31,12 +42,10 @@ function matchesSearch(label: string, description?: string): boolean {
   return label.toLowerCase().includes(q) || (description?.toLowerCase().includes(q) ?? false)
 }
 
-/** Plugins installés, filtrés par recherche */
 const filteredInstalled = computed(() =>
   pluginStore.plugins.filter(p => matchesSearch(p.label, p.description))
 )
 
-/** Plugins du catalogue pas encore installés, filtrés par recherche */
 const availablePlugins = computed(() =>
   PLUGIN_CATALOG.filter(p => !pluginStore.registry.has(p.id) && matchesSearch(p.label, p.description))
 )
@@ -47,6 +56,7 @@ function installPlugin(id: string): void {
 }
 
 function removePlugin(id: string): void {
+  if (pluginStore.isExternalPlugin(id)) removeStoredPlugin(id)
   pluginStore.unregisterPlugin(id)
 }
 
@@ -60,6 +70,54 @@ function deactivateAll(): void {
   for (const id of [...pluginStore.activeIds]) {
     pluginStore.deactivatePlugin(id)
   }
+}
+
+// ─── Import ZIP ──────────────────────────────────────────────────────────────
+
+function triggerFileInput(): void {
+  importError.value = ''
+  fileInput.value?.click()
+}
+
+async function handleFileSelected(event: Event): Promise<void> {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  input.value = '' // reset pour pouvoir re-importer le même fichier
+
+  importLoading.value = true
+  importError.value = ''
+
+  try {
+    const { manifest, jsCode } = await extractPluginFile(file)
+
+    // Vérifier si un plugin avec cet ID existe déjà
+    if (pluginStore.registry.has(manifest.id)) {
+      // Désinstaller l'ancien d'abord
+      removePlugin(manifest.id)
+    }
+
+    const plugin = compileExternalPlugin(manifest, jsCode)
+    storeExternalPlugin(manifest, jsCode)
+    pluginStore.registerPlugin(plugin, true)
+    activeTab.value = 'installed'
+  } catch (err) {
+    importError.value = err instanceof Error ? err.message : String(err)
+  } finally {
+    importLoading.value = false
+  }
+}
+
+// ─── Template ZIP ────────────────────────────────────────────────────────────
+
+async function downloadTemplate(): Promise<void> {
+  const blob = await generateTemplatePrm()
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = 'prisme-plugin-template.prm'
+  a.click()
+  URL.revokeObjectURL(url)
 }
 </script>
 
@@ -92,6 +150,15 @@ function deactivateAll(): void {
             </button>
           </div>
 
+          <!-- Input fichier caché -->
+          <input
+            ref="fileInput"
+            type="file"
+            accept=".prm,.zip"
+            class="hidden"
+            @change="handleFileSelected"
+          />
+
           <!-- Tabs -->
           <div class="flex border-b border-surface-border flex-shrink-0">
             <button
@@ -115,6 +182,27 @@ function deactivateAll(): void {
             >
               <Plus class="w-3.5 h-3.5" />
               Catalogue ({{ availablePlugins.length }})
+            </button>
+            <button
+              @click="triggerFileInput"
+              :disabled="importLoading"
+              class="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-medium transition-colors
+                     text-slate-500 hover:text-slate-300"
+            >
+              <Upload v-if="!importLoading" class="w-3.5 h-3.5" />
+              <span v-else class="w-3.5 h-3.5 border-2 border-slate-500 border-t-transparent rounded-full animate-spin" />
+              Importer .prm
+            </button>
+          </div>
+
+          <!-- Erreur d'import -->
+          <div v-if="importError" class="mx-5 mt-2 px-3 py-2 bg-red-500/10 border border-red-500/30 rounded-lg flex items-start gap-2">
+            <Info class="w-3.5 h-3.5 text-red-400 flex-shrink-0 mt-0.5" />
+            <div class="flex-1 min-w-0">
+              <p class="text-xs text-red-400">{{ importError }}</p>
+            </div>
+            <button @click="importError = ''" class="text-red-400/50 hover:text-red-400 flex-shrink-0">
+              <X class="w-3 h-3" />
             </button>
           </div>
 
@@ -200,7 +288,7 @@ function deactivateAll(): void {
                 </div>
 
                 <div class="flex-1 min-w-0">
-                  <div class="flex items-center gap-2">
+                  <div class="flex items-center gap-2 flex-wrap">
                     <p class="text-xs font-semibold text-slate-200 truncate">{{ plugin.label }}</p>
                     <span
                       class="text-[9px] px-1.5 py-0.5 rounded-full font-medium"
@@ -208,6 +296,13 @@ function deactivateAll(): void {
                         ? 'bg-emerald-500/15 text-emerald-400'
                         : 'bg-slate-700/50 text-slate-500'"
                     >{{ pluginStore.isActive(plugin.id) ? 'Actif' : 'Inactif' }}</span>
+                    <span
+                      v-if="pluginStore.isExternalPlugin(plugin.id)"
+                      class="text-[9px] px-1.5 py-0.5 rounded-full font-medium bg-violet-500/15 text-violet-400 flex items-center gap-1"
+                    >
+                      <ExternalLink class="w-2.5 h-2.5" />
+                      Externe
+                    </span>
                   </div>
                   <p v-if="plugin.description" class="text-[10px] text-slate-500 truncate mt-0.5">
                     {{ plugin.description }}
@@ -350,10 +445,14 @@ function deactivateAll(): void {
 
           <!-- Footer -->
           <div class="flex items-center justify-between px-5 py-3 border-t border-surface-border flex-shrink-0">
-            <div class="flex items-center gap-1.5 text-[10px] text-slate-600">
-              <Info class="w-3 h-3" />
-              <span>{{ PLUGIN_CATALOG.length }} plugins dans le catalogue</span>
-            </div>
+            <button
+              @click="downloadTemplate"
+              class="flex items-center gap-1.5 text-[10px] text-slate-600 hover:text-slate-300 transition-colors"
+              title="Télécharger un template de plugin"
+            >
+              <Download class="w-3 h-3" />
+              <span>Télécharger template</span>
+            </button>
             <button
               @click="emit('close')"
               class="px-4 py-1.5 rounded-lg text-xs font-medium text-white transition-colors"

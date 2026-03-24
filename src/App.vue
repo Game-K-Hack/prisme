@@ -14,21 +14,31 @@ import PluginsModal from '@/components/PluginsModal.vue'
 import { usePluginStore, MAP_LAYER_CONTROLS } from '@/store/pluginStore'
 import { useSettingsStore } from '@/store/settingsStore'
 import { PLUGIN_CATALOG } from '@/plugins/registry'
+import { loadStoredPlugins, compileExternalPlugin } from '@/plugins/externalLoader'
 
 const pluginStore = usePluginStore()
 const settings = useSettingsStore()
 
 onMounted(() => {
-  // Restaurer les plugins installés depuis localStorage, ou installer tous par défaut
+  // Restaurer les plugins built-in
   const savedIds = pluginStore.getInstalledIds()
   if (savedIds.length > 0) {
     for (const plugin of PLUGIN_CATALOG) {
       if (savedIds.includes(plugin.id)) pluginStore.registerPlugin(plugin)
     }
   } else {
-    // Premier lancement : installer tous les plugins
     for (const plugin of PLUGIN_CATALOG) {
       pluginStore.registerPlugin(plugin)
+    }
+  }
+
+  // Restaurer les plugins externes depuis localStorage
+  for (const stored of loadStoredPlugins()) {
+    try {
+      const plugin = compileExternalPlugin(stored.manifest, stored.jsCode)
+      pluginStore.registerPlugin(plugin, true)
+    } catch (err) {
+      console.error(`[Prisme] Plugin externe "${stored.manifest.id}" invalide:`, err)
     }
   }
 })
