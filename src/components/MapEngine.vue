@@ -14,8 +14,7 @@ const pluginStore = usePluginStore()
 // Style vectoriel public (OpenFreeMap — aucune clé API requise)
 const MAP_STYLE = 'https://tiles.openfreemap.org/styles/liberty'
 
-// Centrage initial sur la France métropolitaine
-const FRANCE_CENTER: [number, number] = [2.35, 46.8]
+const INITIAL_CENTER: [number, number] = [2.35, 46.8]
 const INITIAL_ZOOM = 5.5
 
 onMounted(() => {
@@ -24,15 +23,11 @@ onMounted(() => {
   map = new Map({
     container: mapContainer.value,
     style: MAP_STYLE,
-    center: FRANCE_CENTER,
+    center: INITIAL_CENTER,
     zoom: INITIAL_ZOOM,
-    minZoom: 3,
+    minZoom: 1,
     maxZoom: 18,
-    // Limite les tuiles à la zone visible pour économiser de la bande passante
-    maxBounds: [
-      [-10, 35],  // SW : Atlantique + Méditerranée
-      [20, 58],   // NE : Europe du Nord-Est
-    ],
+    renderWorldCopies: false,
     attributionControl: false,
   })
 
