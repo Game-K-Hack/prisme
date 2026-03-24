@@ -1,13 +1,14 @@
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
 import maplibregl, { Map, NavigationControl, ScaleControl } from 'maplibre-gl'
 import { usePluginStore } from '@/store/pluginStore'
+import { useSettingsStore } from '@/store/settingsStore'
 
 const mapContainer = ref<HTMLDivElement | null>(null)
 let map: Map | null = null
 const pluginStore = usePluginStore()
+const settings = useSettingsStore()
 
-const MAP_STYLE = 'https://tiles.openfreemap.org/styles/liberty'
 const INITIAL_CENTER: [number, number] = [2.35, 46.8]
 const INITIAL_ZOOM = 5.5
 
@@ -16,7 +17,7 @@ onMounted(() => {
 
   map = new Map({
     container: mapContainer.value,
-    style: MAP_STYLE,
+    style: settings.mapStyleUrl,
     center: INITIAL_CENTER,
     zoom: INITIAL_ZOOM,
     minZoom: 1,
@@ -32,6 +33,24 @@ onMounted(() => {
   map.on('load', () => {
     if (!map) return
     pluginStore.setMap(map)
+  })
+})
+
+// Changement de style → recharge la carte
+watch(() => settings.mapStyleUrl, (newUrl) => {
+  if (!map) return
+  // Sauvegarder le centre et zoom actuels
+  const center = map.getCenter()
+  const zoom = map.getZoom()
+  // Nettoyer les plugins/POI actifs (les layers seront perdues au changement de style)
+  pluginStore.clearPOI()
+  for (const id of [...pluginStore.activeIds]) {
+    pluginStore.deactivatePlugin(id)
+  }
+  map.setStyle(newUrl)
+  map.once('styledata', () => {
+    map!.setCenter(center)
+    map!.setZoom(zoom)
   })
 })
 

@@ -2,17 +2,20 @@
 import { ref, onMounted, computed } from 'vue'
 import {
   ChevronLeft, ChevronRight,
-  Map as MapIcon, Layers, CircleDot, X,
+  Map as MapIcon, Layers, CircleDot, X, Fuel,
   Search, Settings2, Loader2, Trash2,
   Zap, SlidersHorizontal,
 } from 'lucide-vue-next'
 import * as LucideIcons from 'lucide-vue-next'
 import type { Component } from 'vue'
 import MapEngine from '@/components/MapEngine.vue'
+import SettingsModal from '@/components/SettingsModal.vue'
 import { usePluginStore, QUICK_FILTERS, MAP_LAYER_CONTROLS } from '@/store/pluginStore'
+import { useSettingsStore } from '@/store/settingsStore'
 import { fuelPlugin } from '@/plugins/fuelPlugin'
 
 const pluginStore = usePluginStore()
+const settings = useSettingsStore()
 
 onMounted(() => {
   pluginStore.registerPlugin(fuelPlugin)
@@ -20,6 +23,7 @@ onMounted(() => {
 
 const sidebarOpen = ref(true)
 const toggleSidebar = () => { sidebarOpen.value = !sidebarOpen.value }
+const showSettings = ref(false)
 
 // ─── Recherche POI ───────────────────────────────────────────────────────────
 
@@ -84,12 +88,15 @@ const mapLayerControls = MAP_LAYER_CONTROLS
     <aside
       class="relative flex flex-col flex-shrink-0 bg-surface-raised border-r border-surface-border
              transition-all duration-300 ease-in-out overflow-hidden z-20"
-      :class="sidebarOpen ? 'w-64' : 'w-14'"
+      :style="{ width: sidebarOpen ? settings.sidebarWidth + 'px' : '3.5rem' }"
     >
       <!-- En-tête -->
       <div class="flex items-center h-14 px-3 border-b border-surface-border flex-shrink-0">
         <div class="flex items-center gap-2 min-w-0">
-          <div class="w-7 h-7 rounded-md bg-indigo-600 flex items-center justify-center flex-shrink-0">
+          <div
+            class="w-7 h-7 rounded-md flex items-center justify-center flex-shrink-0"
+            :style="`background-color:${settings.accent600}`"
+          >
             <MapIcon class="w-4 h-4 text-white" />
           </div>
           <Transition name="fade">
@@ -98,6 +105,18 @@ const mapLayerControls = MAP_LAYER_CONTROLS
             </span>
           </Transition>
         </div>
+        <!-- Bouton paramètres -->
+        <Transition name="fade">
+          <button
+            v-if="sidebarOpen"
+            @click="showSettings = true"
+            title="Paramètres"
+            class="ml-auto flex-shrink-0 w-7 h-7 rounded-md flex items-center justify-center
+                   text-slate-500 hover:text-slate-200 hover:bg-surface-overlay transition-colors"
+          >
+            <Settings2 class="w-3.5 h-3.5" />
+          </button>
+        </Transition>
       </div>
 
       <!-- Bouton toggle -->
@@ -202,7 +221,7 @@ const mapLayerControls = MAP_LAYER_CONTROLS
                   ? `color:${qf.color};border-color:${qf.color}40;background-color:${qf.color}15`
                   : ''"
               >
-                <span class="flex-shrink-0">{{ qf.icon }}</span>
+                <component :is="resolveIcon(qf.icon)" class="w-3 h-3 flex-shrink-0" />
                 <span class="truncate">{{ qf.label }}</span>
               </button>
             </div>
@@ -217,7 +236,7 @@ const mapLayerControls = MAP_LAYER_CONTROLS
               :title="qf.label"
               class="w-full flex items-center justify-center py-1.5 rounded-md text-sm transition-colors"
               :class="pluginStore.isQuickFilterActive(qf.id) ? '' : 'opacity-50 hover:opacity-100'"
-            >{{ qf.icon }}</button>
+            ><component :is="resolveIcon(qf.icon)" class="w-3.5 h-3.5" /></button>
           </div>
         </div>
 
@@ -297,7 +316,7 @@ const mapLayerControls = MAP_LAYER_CONTROLS
                              text-[10px] text-slate-400 hover:text-slate-200 hover:bg-surface-overlay
                              transition-colors text-left truncate"
                     >
-                      <span class="flex-shrink-0">{{ cat.icon }}</span>
+                      <component :is="resolveIcon(cat.icon ?? 'CircleDot')" class="w-3 h-3 flex-shrink-0" />
                       <span class="truncate">{{ cat.label }}</span>
                     </button>
                   </div>
@@ -341,7 +360,10 @@ const mapLayerControls = MAP_LAYER_CONTROLS
                   class="flex items-center gap-2 px-2 py-1.5 bg-surface rounded-lg group"
                 >
                   <span class="w-2.5 h-2.5 rounded-full flex-shrink-0" :style="`background-color:${search.color}`" />
-                  <span class="text-[10px] text-slate-300 flex-1 truncate">{{ search.icon }} {{ search.query }}</span>
+                  <span class="text-[10px] text-slate-300 flex-1 truncate flex items-center gap-1.5">
+                    <component :is="resolveIcon(search.icon)" class="w-3 h-3 flex-shrink-0" />
+                    {{ search.query }}
+                  </span>
                   <span class="text-[10px] text-slate-500 flex-shrink-0">{{ search.count }}</span>
                   <button
                     @click="pluginStore.clearPOI(search.id)"
@@ -380,7 +402,7 @@ const mapLayerControls = MAP_LAYER_CONTROLS
                 : 'text-slate-500 hover:bg-surface-overlay hover:text-slate-300'"
             >
               <span class="w-5 h-5 flex items-center justify-center flex-shrink-0 text-xs">
-                {{ ctrl.icon }}
+                <component :is="resolveIcon(ctrl.icon)" class="w-3.5 h-3.5" />
               </span>
               <Transition name="fade">
                 <p v-if="sidebarOpen" class="text-[10px] font-medium truncate flex-1">{{ ctrl.label }}</p>
@@ -390,7 +412,7 @@ const mapLayerControls = MAP_LAYER_CONTROLS
                   v-if="sidebarOpen"
                   class="ml-auto flex-shrink-0 inline-flex items-center w-7 h-4 rounded-full p-0.5 transition-colors duration-200"
                   :style="pluginStore.mapLayerVisibility[ctrl.id]
-                    ? 'background-color:#6366f1'
+                    ? 'background-color:var(--accent-500)'
                     : 'background-color:#2a3045'"
                 >
                   <span
@@ -405,7 +427,7 @@ const mapLayerControls = MAP_LAYER_CONTROLS
       </div>
 
       <!-- Footer -->
-      <div class="border-t border-surface-border px-3 py-2.5 flex items-center gap-2 flex-shrink-0">
+      <div v-if="settings.showFooter" class="border-t border-surface-border px-3 py-2.5 flex items-center gap-2 flex-shrink-0">
         <span
           class="w-1.5 h-1.5 rounded-full flex-shrink-0"
           :class="pluginStore.activeIds.size > 0 ? 'bg-emerald-500' : 'bg-slate-600'"
@@ -440,7 +462,7 @@ const mapLayerControls = MAP_LAYER_CONTROLS
           <div
             class="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 text-lg"
             :style="`background-color:${fuelDetail.color}22`"
-          >⛽</div>
+          ><Fuel class="w-5 h-5" :style="`color:${fuelDetail.color}`" /></div>
           <div class="flex-1 min-w-0">
             <p class="text-sm font-semibold text-slate-100 truncate">{{ fuelDetail.name }}</p>
             <p class="text-xs text-slate-500 mt-0.5">{{ fuelDetail.brand }} · {{ fuelDetail.city }}</p>
@@ -487,6 +509,9 @@ const mapLayerControls = MAP_LAYER_CONTROLS
         </div>
       </div>
     </aside>
+
+    <!-- ═══ SETTINGS MODAL ═══════════════════════════════════════════════════ -->
+    <SettingsModal :open="showSettings" @close="showSettings = false" />
 
   </div>
 </template>
