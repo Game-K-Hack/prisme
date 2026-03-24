@@ -184,7 +184,7 @@ function addFilter(): void {
                     <label class="text-[9px] uppercase tracking-wider text-slate-600">Recherche OSM</label>
                     <input
                       v-model="newQuery"
-                      placeholder="Ex: Boulangerie, wheelchair:yes, brand:Leclerc…"
+                      placeholder="Ex: Boulangerie, fuel:diesel=yes, brand:Leclerc…"
                       class="w-full mt-1 px-2.5 py-1.5 bg-surface-raised border border-surface-border rounded-md
                              text-[11px] text-slate-200 placeholder-slate-600
                              focus:outline-none focus:border-[var(--accent-500)] transition-colors"
