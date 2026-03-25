@@ -8,6 +8,7 @@ import * as LucideIcons from 'lucide-vue-next'
 import type { Component } from 'vue'
 import { usePluginStore } from '@/store/pluginStore'
 import { PLUGIN_CATALOG } from '@/plugins/registry'
+import PluginSettingsPanel from '@/components/PluginSettingsPanel.vue'
 import {
   extractPluginFile, compileExternalPlugin,
   storeExternalPlugin, removeStoredPlugin,
@@ -391,6 +392,13 @@ async function downloadTemplate(): Promise<void> {
                         </div>
                       </div>
                     </div>
+
+                    <!-- Plugin settings -->
+                    <PluginSettingsPanel
+                      v-if="plugin.settingsDescriptors && plugin.settingsDescriptors.length > 0"
+                      :plugin-id="plugin.id"
+                      :descriptors="plugin.settingsDescriptors"
+                    />
                   </div>
                 </div>
               </Transition>

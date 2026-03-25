@@ -81,18 +81,36 @@ function clearAllSearches(): void {
 
 // ─── Détail carburant ────────────────────────────────────────────────────────
 
+interface FuelPrice { label: string; sub: string; value: number; accent: boolean }
+
 const fuelDetail = computed(() => {
   const f = pluginStore.selectedFeature
   if (!f || f.pluginId !== 'fuel') return null
   const p = f.properties
-  return {
-    name: String(p['name'] ?? ''),
-    city: String(p['city'] ?? ''),
-    brand: String(p['brand'] ?? ''),
-    price_sp95: Number(p['price_sp95']),
-    price_diesel: Number(p['price_diesel']),
-    color: String(p['color'] ?? '#f97316'),
+
+  const ville = String(p['ville'] ?? '')
+  const adresse = String(p['adresse'] ?? '')
+  const cp = String(p['cp'] ?? '')
+  const dept = String(p['departement'] ?? '')
+  const region = String(p['region'] ?? '')
+  const automate = p['automate'] === true || p['automate'] === 'true'
+
+  const prices: FuelPrice[] = []
+  const add = (label: string, sub: string, key: string, accent: boolean) => {
+    const v = Number(p[key])
+    if (v && v > 0) prices.push({ label, sub, value: v, accent })
   }
+  add('Sans Plomb 95-E10', 'E10', 'e10', true)
+  add('Sans Plomb 95', 'SP95', 'sp95', false)
+  add('Sans Plomb 98', 'SP98', 'sp98', false)
+  add('Gazole', 'Diesel', 'gazole', false)
+  add('Superéthanol', 'E85', 'e85', false)
+  add('GPL', 'GPLc', 'gplc', false)
+
+  const servicesRaw = String(p['services'] ?? '')
+  const services = servicesRaw ? servicesRaw.split(',').map(s => s.trim()).filter(Boolean) : []
+
+  return { ville, adresse, cp, dept, region, automate, prices, services }
 })
 
 function resolveIcon(name: string): Component {
@@ -482,13 +500,13 @@ const mapLayerControls = MAP_LAYER_CONTROLS
       <div v-if="fuelDetail" class="w-80 flex flex-col h-full">
         <!-- En-tête -->
         <div class="flex items-center gap-3 px-4 py-4 border-b border-surface-border flex-shrink-0">
-          <div
-            class="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 text-lg"
-            :style="`background-color:${fuelDetail.color}22`"
-          ><Fuel class="w-5 h-5" :style="`color:${fuelDetail.color}`" /></div>
+          <div class="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 bg-blue-500/15">
+            <Fuel class="w-5 h-5 text-blue-400" />
+          </div>
           <div class="flex-1 min-w-0">
-            <p class="text-base font-semibold text-slate-100 truncate">{{ fuelDetail.name }}</p>
-            <p class="text-sm text-slate-500 mt-0.5">{{ fuelDetail.brand }} · {{ fuelDetail.city }}</p>
+            <p class="text-base font-semibold text-slate-100 truncate">{{ fuelDetail.ville }}</p>
+            <p class="text-sm text-slate-500 mt-0.5 truncate">{{ fuelDetail.adresse }}</p>
+            <p class="text-xs text-slate-600 mt-0.5">{{ fuelDetail.cp }} · {{ fuelDetail.dept }}</p>
           </div>
           <button
             @click="pluginStore.selectFeature(null)"
@@ -500,35 +518,75 @@ const mapLayerControls = MAP_LAYER_CONTROLS
           </button>
         </div>
 
-        <!-- Prix -->
-        <div class="p-4 space-y-3 flex-1 overflow-y-auto">
-          <p class="text-xs font-semibold uppercase tracking-widest text-slate-500 mb-1">Tarifs</p>
+        <!-- Contenu scrollable -->
+        <div class="flex-1 overflow-y-auto">
 
-          <div class="flex items-center justify-between bg-surface rounded-lg px-4 py-3">
-            <div>
-              <p class="text-sm font-medium text-slate-300">Sans Plomb 95</p>
-              <p class="text-xs text-slate-500 mt-0.5">SP95</p>
+          <!-- Prix -->
+          <div class="p-4 space-y-2">
+            <p class="text-xs font-semibold uppercase tracking-widest text-slate-500 mb-2">Tarifs disponibles</p>
+
+            <div
+              v-for="(price, i) in fuelDetail.prices"
+              :key="i"
+              class="flex items-center justify-between bg-surface rounded-lg px-4 py-3"
+            >
+              <div>
+                <p class="text-sm font-medium text-slate-300">{{ price.label }}</p>
+                <p class="text-xs text-slate-500 mt-0.5">{{ price.sub }}</p>
+              </div>
+              <div class="text-right">
+                <p
+                  class="text-xl font-bold leading-none"
+                  :class="price.accent ? 'text-blue-400' : 'text-slate-300'"
+                >
+                  {{ price.value.toFixed(3) }}
+                </p>
+                <p class="text-xs text-slate-500 mt-1">€ / litre</p>
+              </div>
             </div>
-            <div class="text-right">
-              <p class="text-2xl font-bold leading-none" :style="`color:${fuelDetail.color}`">
-                {{ fuelDetail.price_sp95.toFixed(3) }}
-              </p>
-              <p class="text-xs text-slate-500 mt-1">€ / litre</p>
+
+            <p v-if="fuelDetail.prices.length === 0" class="text-xs text-slate-600 text-center py-4">
+              Aucun prix disponible
+            </p>
+          </div>
+
+          <!-- Infos -->
+          <div class="px-4 pb-3">
+            <p class="text-xs font-semibold uppercase tracking-widest text-slate-500 mb-2">Informations</p>
+            <div class="space-y-2">
+              <div class="flex items-center gap-2">
+                <span
+                  class="text-xs px-2 py-1 rounded-md"
+                  :class="fuelDetail.automate
+                    ? 'bg-emerald-500/15 text-emerald-400'
+                    : 'bg-slate-700/50 text-slate-500'"
+                >{{ fuelDetail.automate ? 'Automate 24/24' : 'Horaires limités' }}</span>
+              </div>
+              <div class="flex items-start gap-2">
+                <span class="text-xs text-slate-500 flex-shrink-0 mt-0.5 w-14">Région</span>
+                <span class="text-xs text-slate-300">{{ fuelDetail.region }}</span>
+              </div>
+              <div class="flex items-start gap-2">
+                <span class="text-xs text-slate-500 flex-shrink-0 mt-0.5 w-14">Dept.</span>
+                <span class="text-xs text-slate-300">{{ fuelDetail.dept }}</span>
+              </div>
             </div>
           </div>
 
-          <div class="flex items-center justify-between bg-surface rounded-lg px-4 py-3">
-            <div>
-              <p class="text-sm font-medium text-slate-300">Gazole</p>
-              <p class="text-xs text-slate-500 mt-0.5">Diesel</p>
-            </div>
-            <div class="text-right">
-              <p class="text-2xl font-bold text-slate-300 leading-none">
-                {{ fuelDetail.price_diesel.toFixed(3) }}
-              </p>
-              <p class="text-xs text-slate-500 mt-1">€ / litre</p>
+          <!-- Services -->
+          <div v-if="fuelDetail.services.length > 0" class="px-4 pb-4">
+            <p class="text-xs font-semibold uppercase tracking-widest text-slate-500 mb-2">
+              Services ({{ fuelDetail.services.length }})
+            </p>
+            <div class="flex flex-wrap gap-1.5">
+              <span
+                v-for="(service, i) in fuelDetail.services"
+                :key="i"
+                class="text-xs px-2.5 py-1 rounded-md bg-surface border border-surface-border text-slate-400"
+              >{{ service }}</span>
             </div>
           </div>
+
         </div>
       </div>
     </aside>

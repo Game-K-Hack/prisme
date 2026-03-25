@@ -305,6 +305,47 @@ export const usePluginStore = defineStore('plugins', () => {
   const mapInstance = ref<MapLibreMap | null>(null)
   const selectedFeature = ref<SelectedFeature | null>(null)
 
+  // ─── Plugin settings ──────────────────────────────────────────────────────
+  const PSETTINGS_KEY = 'prisme-plugin-settings'
+  const pluginSettings = ref<Record<string, Record<string, unknown>>>(
+    (() => { try { return JSON.parse(localStorage.getItem(PSETTINGS_KEY) ?? '{}') } catch { return {} } })()
+  )
+
+  function savePluginSettings(): void {
+    localStorage.setItem(PSETTINGS_KEY, JSON.stringify(pluginSettings.value))
+  }
+
+  function getPluginSetting<T = unknown>(pluginId: string, key: string): T {
+    const plugin = registry.value.get(pluginId)
+    const saved = pluginSettings.value[pluginId]?.[key]
+    if (saved !== undefined) return saved as T
+    const desc = plugin?.settingsDescriptors?.find(d => d.key === key)
+    return (desc?.default ?? null) as T
+  }
+
+  function setPluginSetting(pluginId: string, key: string, value: unknown): void {
+    if (!pluginSettings.value[pluginId]) pluginSettings.value[pluginId] = {}
+    pluginSettings.value[pluginId][key] = value
+    savePluginSettings()
+
+    // Si le plugin est actif, le redémarrer pour appliquer le changement
+    if (activeIds.value.has(pluginId)) {
+      deactivatePlugin(pluginId)
+      activatePlugin(pluginId)
+    }
+  }
+
+  function initPluginDefaults(plugin: FranceDataPlugin): void {
+    if (!plugin.settingsDescriptors) return
+    if (!pluginSettings.value[plugin.id]) pluginSettings.value[plugin.id] = {}
+    for (const desc of plugin.settingsDescriptors) {
+      if (pluginSettings.value[plugin.id][desc.key] === undefined) {
+        pluginSettings.value[plugin.id][desc.key] = desc.default
+      }
+    }
+    savePluginSettings()
+  }
+
   // ─── Contrôles carte ───────────────────────────────────────────────────────
   const labelsVisible = ref(true)
   const poiLoading = ref(false)
@@ -346,6 +387,7 @@ export const usePluginStore = defineStore('plugins', () => {
     if (registry.value.has(plugin.id)) return
     registry.value.set(plugin.id, plugin)
     if (isExternal) externalPluginIds.value.add(plugin.id)
+    initPluginDefaults(plugin)
     saveInstalledIds()
   }
 
@@ -698,6 +740,8 @@ export const usePluginStore = defineStore('plugins', () => {
     plugins, isActive,
     setMap, selectFeature, registerPlugin, unregisterPlugin, isExternalPlugin, getInstalledIds,
     activatePlugin, deactivatePlugin, togglePlugin,
+    // Plugin settings
+    pluginSettings, getPluginSetting, setPluginSetting,
     // Carte — POI
     poiLoading, poiSearches, poiWarning,
     poiGroups, poiCategories,

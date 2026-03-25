@@ -2,131 +2,335 @@ import type { FranceDataPlugin } from '@/plugins/index'
 import type { Map as MapLibreMap } from 'maplibre-gl'
 import { usePluginStore } from '@/store/pluginStore'
 
+// ─── Icône SVG pompe à essence (SDF monochrome pour MapLibre) ────────────────
+
+const FUEL_SVG_SIZE = 48
+const FUEL_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="${FUEL_SVG_SIZE}" height="${FUEL_SVG_SIZE}" viewBox="0 0 24 24" fill="white">
+  <path d="M3 22V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v17H3z"/>
+  <path d="M7 2v3"/>
+  <path d="M9 2v3"/>
+  <rect x="5" y="9" width="6" height="4" rx="0.5" fill="black" opacity="0.3"/>
+  <path d="M14 8h2a2 2 0 0 1 2 2v4a2 2 0 0 0 2 2v0a2 2 0 0 0 2-2V7l-3-3" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="20" cy="7" r="1" fill="white"/>
+</svg>`
+
+function loadSdfImage(map: MapLibreMap, id: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const img = new Image(FUEL_SVG_SIZE, FUEL_SVG_SIZE)
+    img.onload = () => {
+      if (!map.hasImage(id)) {
+        map.addImage(id, img, { sdf: true })
+      }
+      resolve()
+    }
+    img.onerror = reject
+    img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(FUEL_SVG)
+  })
+}
+
+// ─── Types ───────────────────────────────────────────────────────────────────
+
 interface FuelStation {
   id: string
-  name: string
-  city: string
-  coordinates: [number, number]
-  price_sp95: number
-  price_diesel: number
-  brand: string
+  lat: number
+  lng: number
+  adresse: string
+  ville: string
+  cp: string
+  departement: string
+  region: string
+  automate: boolean
+  services: string
+  gazole: number | null
+  sp95: number | null
+  sp98: number | null
+  e10: number | null
+  e85: number | null
+  gplc: number | null
 }
 
-const FUEL_STATIONS: FuelStation[] = [
-  { id: 'f01', name: 'Total Énergie Nation', city: 'Paris', coordinates: [2.3964, 48.8502], price_sp95: 1.939, price_diesel: 1.812, brand: 'TotalEnergies' },
-  { id: 'f02', name: 'BP Porte de Clichy', city: 'Paris', coordinates: [2.3187, 48.8935], price_sp95: 1.899, price_diesel: 1.789, brand: 'BP' },
-  { id: 'f03', name: 'Leclerc Lyon Est', city: 'Lyon', coordinates: [4.8946, 45.7488], price_sp95: 1.799, price_diesel: 1.694, brand: 'Leclerc' },
-  { id: 'f04', name: 'Intermarché Vaise', city: 'Lyon', coordinates: [4.8050, 45.7726], price_sp95: 1.819, price_diesel: 1.712, brand: 'Intermarché' },
-  { id: 'f05', name: 'Total Joliette', city: 'Marseille', coordinates: [5.3681, 43.3149], price_sp95: 1.959, price_diesel: 1.842, brand: 'TotalEnergies' },
-  { id: 'f06', name: 'Auchan Vitrolles', city: 'Marseille', coordinates: [5.2357, 43.4212], price_sp95: 1.829, price_diesel: 1.722, brand: 'Auchan' },
-  { id: 'f07', name: 'BP Capitole', city: 'Toulouse', coordinates: [1.4442, 43.6043], price_sp95: 1.869, price_diesel: 1.754, brand: 'BP' },
-  { id: 'f08', name: 'Leclerc Blagnac', city: 'Toulouse', coordinates: [1.3896, 43.6361], price_sp95: 1.789, price_diesel: 1.679, brand: 'Leclerc' },
-  { id: 'f09', name: 'Esso Préfecture', city: 'Bordeaux', coordinates: [-0.5752, 44.8378], price_sp95: 1.919, price_diesel: 1.802, brand: 'Esso' },
-  { id: 'f10', name: 'Carrefour Mériadeck', city: 'Bordeaux', coordinates: [-0.5894, 44.8367], price_sp95: 1.849, price_diesel: 1.738, brand: 'Carrefour' },
-  { id: 'f11', name: 'Total Saint-Nicolas', city: 'Nantes', coordinates: [-1.5567, 47.2184], price_sp95: 1.909, price_diesel: 1.797, brand: 'TotalEnergies' },
-  { id: 'f12', name: 'Leclerc Rezé', city: 'Nantes', coordinates: [-1.5574, 47.1809], price_sp95: 1.779, price_diesel: 1.669, brand: 'Leclerc' },
-  { id: 'f13', name: 'BP Esplanade', city: 'Strasbourg', coordinates: [7.7521, 48.5831], price_sp95: 1.889, price_diesel: 1.772, brand: 'BP' },
-  { id: 'f14', name: 'Total Meinau', city: 'Strasbourg', coordinates: [7.7642, 48.5538], price_sp95: 1.859, price_diesel: 1.748, brand: 'TotalEnergies' },
-  { id: 'f15', name: 'Intermarché Lille Centre', city: 'Lille', coordinates: [3.0640, 50.6367], price_sp95: 1.849, price_diesel: 1.731, brand: 'Intermarché' },
-  { id: 'f16', name: "Auchan Villeneuve d'Ascq", city: 'Lille', coordinates: [3.1423, 50.6282], price_sp95: 1.809, price_diesel: 1.699, brand: 'Auchan' },
-  { id: 'f17', name: 'Total Rennes Sud', city: 'Rennes', coordinates: [-1.6780, 48.1019], price_sp95: 1.929, price_diesel: 1.819, brand: 'TotalEnergies' },
-  { id: 'f18', name: 'Leclerc Cesson', city: 'Rennes', coordinates: [-1.6024, 48.1063], price_sp95: 1.799, price_diesel: 1.684, brand: 'Leclerc' },
-  { id: 'f19', name: 'BP Nice Étoile', city: 'Nice', coordinates: [7.2621, 43.6964], price_sp95: 1.989, price_diesel: 1.872, brand: 'BP' },
-  { id: 'f20', name: 'Total Mont-Boron', city: 'Nice', coordinates: [7.2941, 43.6978], price_sp95: 1.969, price_diesel: 1.861, brand: 'TotalEnergies' },
-]
+// ─── API & Cache ─────────────────────────────────────────────────────────────
 
-function getPriceRatio(price: number): number {
-  return Math.min(1, Math.max(0, (price - 1.65) / 0.35))
+const API_URL = 'https://data.economie.gouv.fr/api/explore/v2.1/catalog/datasets/prix-des-carburants-en-france-flux-instantane-v2/exports/csv?use_labels=true'
+const CACHE_KEY = 'prisme-fuel-cache'
+const CACHE_TTL = 24 * 60 * 60 * 1000
+
+interface CacheEntry { csv: string; fetchedAt: number }
+
+function loadCache(): CacheEntry | null {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY)
+    if (!raw) return null
+    const entry: CacheEntry = JSON.parse(raw)
+    if (Date.now() - entry.fetchedAt < CACHE_TTL) return entry
+  } catch { /* ignore */ }
+  return null
 }
 
-function priceToColor(price: number): string {
-  const ratio = getPriceRatio(price)
+function saveCache(csv: string): void {
+  try { localStorage.setItem(CACHE_KEY, JSON.stringify({ csv, fetchedAt: Date.now() })) }
+  catch { console.warn('[Prisme/fuel] Cache localStorage plein') }
+}
+
+async function fetchCSV(): Promise<string> {
+  const cached = loadCache()
+  if (cached) { console.log('[Prisme/fuel] Cache OK'); return cached.csv }
+  console.log('[Prisme/fuel] Téléchargement...')
+  const res = await fetch(API_URL)
+  if (!res.ok) throw new Error(`Erreur API: ${res.status}`)
+  const csv = await res.text()
+  saveCache(csv)
+  return csv
+}
+
+// ─── Parser ──────────────────────────────────────────────────────────────────
+
+function parsePrice(val: string): number | null {
+  if (!val || val.trim() === '') return null
+  const n = parseFloat(val)
+  return isNaN(n) ? null : n
+}
+
+/** Parse une ligne CSV en respectant les guillemets (champs avec ; à l'intérieur) */
+function parseCsvLine(line: string, sep: string): string[] {
+  const fields: string[] = []
+  let current = ''
+  let inQuotes = false
+
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i]
+    if (inQuotes) {
+      if (ch === '"') {
+        if (i + 1 < line.length && line[i + 1] === '"') {
+          current += '"'
+          i++ // skip escaped quote
+        } else {
+          inQuotes = false
+        }
+      } else {
+        current += ch
+      }
+    } else {
+      if (ch === '"') {
+        inQuotes = true
+      } else if (ch === sep) {
+        fields.push(current)
+        current = ''
+      } else {
+        current += ch
+      }
+    }
+  }
+  fields.push(current)
+  return fields
+}
+
+function parseStations(csv: string): FuelStation[] {
+  const lines = csv.split('\n')
+  if (lines.length < 2) return []
+  const headers = parseCsvLine(lines[0], ';')
+  const idx = (name: string) => headers.indexOf(name)
+
+  const iGeom = idx('geom'), iAdresse = idx('Adresse'), iVille = idx('Ville')
+  const iCp = idx('Code postal'), iId = idx('id')
+  const iDept = idx('Département'), iRegion = idx('Région')
+  const iAutomate = idx('Automate 24-24 (oui/non)')
+  const iServices = idx('Services proposés')
+  const iGazole = idx('Prix Gazole'), iSp95 = idx('Prix SP95')
+  const iSp98 = idx('Prix SP98'), iE10 = idx('Prix E10')
+  const iE85 = idx('Prix E85'), iGplc = idx('Prix GPLc')
+
+  const stations: FuelStation[] = []
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i].trim()
+    if (!line) continue
+    const cols = parseCsvLine(line, ';')
+    const geom = cols[iGeom]
+    if (!geom?.includes(',')) continue
+    const parts = geom.split(',').map(s => parseFloat(s.trim()))
+    if (parts.length < 2 || isNaN(parts[0]) || isNaN(parts[1])) continue
+    const [lat, lng] = parts
+    if (lat < 41 || lat > 52 || lng < -6 || lng > 10) continue
+
+    stations.push({
+      id: cols[iId] ?? `s${i}`, lat, lng,
+      adresse: cols[iAdresse] ?? '', ville: cols[iVille] ?? '',
+      cp: cols[iCp] ?? '', departement: cols[iDept] ?? '', region: cols[iRegion] ?? '',
+      automate: cols[iAutomate]?.toLowerCase() === 'oui',
+      services: cols[iServices] ?? '',
+      gazole: parsePrice(cols[iGazole]), sp95: parsePrice(cols[iSp95]),
+      sp98: parsePrice(cols[iSp98]), e10: parsePrice(cols[iE10]),
+      e85: parsePrice(cols[iE85]), gplc: parsePrice(cols[iGplc]),
+    })
+  }
+  return stations
+}
+
+// ─── Couleurs ────────────────────────────────────────────────────────────────
+
+type FuelType = 'best' | 'e10' | 'sp95' | 'sp98' | 'gazole' | 'e85'
+
+function getPrice(s: FuelStation, type: FuelType): number | null {
+  if (type === 'best') return s.e10 ?? s.sp95 ?? s.sp98 ?? s.gazole ?? null
+  return s[type] ?? null
+}
+
+function computeAverage(stations: FuelStation[], type: FuelType): number {
+  let sum = 0, count = 0
+  for (const s of stations) {
+    const p = getPrice(s, type)
+    if (p !== null) { sum += p; count++ }
+  }
+  return count > 0 ? sum / count : 1.85
+}
+
+/** Couleur relative à la moyenne nationale (vert=moins cher, rouge=plus cher) */
+function priceToColorRelative(price: number, avg: number): string {
+  // Spread de ±0.30€ autour de la moyenne
+  const ratio = Math.min(1, Math.max(0, (price - (avg - 0.30)) / 0.60))
   if (ratio < 0.5) {
     const t = ratio * 2
-    const r = Math.round(34 + (249 - 34) * t)
-    const g = Math.round(197 + (115 - 197) * t)
-    const b = Math.round(94 + (22 - 94) * t)
-    return `rgb(${r},${g},${b})`
-  } else {
-    const t = (ratio - 0.5) * 2
-    const r = Math.round(249 + (239 - 249) * t)
-    const g = Math.round(115 + (68 - 115) * t)
-    const b = Math.round(22 + (68 - 22) * t)
+    const r = Math.round(34 + 215 * t)
+    const g = Math.round(197 - 82 * t)
+    const b = Math.round(94 - 72 * t)
     return `rgb(${r},${g},${b})`
   }
+  const t = (ratio - 0.5) * 2
+  return `rgb(${Math.round(249 - 10 * t)},${Math.round(115 - 47 * t)},${Math.round(22 + 46 * t)})`
 }
 
-function buildGeoJSON(): GeoJSON.FeatureCollection {
+// ─── GeoJSON ─────────────────────────────────────────────────────────────────
+
+function buildGeoJSON(
+  stations: FuelStation[],
+  fuelType: FuelType,
+  colorByPrice: boolean,
+  defaultColor: string,
+): GeoJSON.FeatureCollection {
+  const avg = colorByPrice ? computeAverage(stations, fuelType) : 0
+
   return {
     type: 'FeatureCollection',
-    features: FUEL_STATIONS.map((s) => ({
-      type: 'Feature',
-      geometry: { type: 'Point', coordinates: s.coordinates },
-      properties: {
-        id: s.id,
-        name: s.name,
-        city: s.city,
-        brand: s.brand,
-        price_sp95: s.price_sp95,
-        price_diesel: s.price_diesel,
-        color: priceToColor(s.price_sp95),
-        price_ratio: getPriceRatio(s.price_sp95),
-      },
-    })),
+    features: stations
+      .filter(s => getPrice(s, fuelType) !== null)
+      .map(s => {
+        const price = getPrice(s, fuelType)!
+        return {
+          type: 'Feature' as const,
+          geometry: { type: 'Point' as const, coordinates: [s.lng, s.lat] },
+          properties: {
+            id: s.id, ville: s.ville, adresse: s.adresse, cp: s.cp,
+            departement: s.departement, region: s.region, automate: s.automate,
+            services: s.services,
+            gazole: s.gazole, sp95: s.sp95, sp98: s.sp98,
+            e10: s.e10, e85: s.e85, gplc: s.gplc,
+            best_price: price,
+            color: colorByPrice ? priceToColorRelative(price, avg) : defaultColor,
+          },
+        }
+      }),
   }
 }
 
-const SOURCE_ID = 'prisme_fuel_source'
-const LAYER_CIRCLE_ID = 'prisme_fuel_circle'
-const LAYER_LABEL_ID = 'prisme_fuel_label'
+// ─── Plugin ──────────────────────────────────────────────────────────────────
 
-// Handlers stockés pour pouvoir les retirer proprement au teardown
+const SOURCE_ID = 'prisme_fuel_source'
+const LAYER_ICON = 'prisme_fuel_icon'
+const LAYER_LABEL = 'prisme_fuel_label'
+const IMAGE_ID = 'prisme-fuel-pump-sdf'
+
 let clickHandler: ((e: maplibregl.MapMouseEvent & { features?: maplibregl.MapGeoJSONFeature[] }) => void) | null = null
 let bgClickHandler: ((e: maplibregl.MapMouseEvent) => void) | null = null
 
 export const fuelPlugin: FranceDataPlugin = {
   id: 'fuel',
-  label: 'Carburants',
+  label: 'Prix Carburants',
   icon: 'Fuel',
-  color: '#f97316',
-  description: 'Prix des carburants en temps réel sur les stations françaises',
+  color: '#3b82f6',
+  description: 'Prix des carburants en France — données data.gouv.fr (MàJ quotidienne)',
 
-  setup(map: MapLibreMap): void {
+  settingsDescriptors: [
+    {
+      key: 'colorByPrice',
+      label: 'Colorer selon le prix',
+      description: 'Vert = moins cher que la moyenne, Rouge = plus cher',
+      type: 'boolean',
+      default: true,
+    },
+    {
+      key: 'fuelType',
+      label: 'Carburant de référence',
+      description: 'Détermine le prix affiché et la couleur',
+      type: 'select',
+      default: 'best',
+      options: [
+        { value: 'best', label: 'Meilleur prix disponible' },
+        { value: 'e10', label: 'E10' },
+        { value: 'sp95', label: 'SP95' },
+        { value: 'sp98', label: 'SP98' },
+        { value: 'gazole', label: 'Gazole' },
+        { value: 'e85', label: 'E85' },
+      ],
+    },
+  ],
+
+  async setup(map: MapLibreMap): Promise<void> {
     if (map.getSource(SOURCE_ID)) return
+
+    const store = usePluginStore()
+    const colorByPrice = store.getPluginSetting<boolean>('fuel', 'colorByPrice')
+    const fuelType = store.getPluginSetting<FuelType>('fuel', 'fuelType')
+
+    // Charger l'icône SDF
+    await loadSdfImage(map, IMAGE_ID)
+
+    // Charger les données
+    let csv: string
+    try { csv = await fetchCSV() }
+    catch (err) { console.error('[Prisme/fuel]', err); return }
+
+    const stations = parseStations(csv)
+    console.log(`[Prisme/fuel] ${stations.length} stations`)
+    if (stations.length === 0) return
 
     map.addSource(SOURCE_ID, {
       type: 'geojson',
-      data: buildGeoJSON(),
+      data: buildGeoJSON(stations, fuelType, colorByPrice, '#3b82f6'),
     })
 
+    // Layer icône pompe (SDF)
     map.addLayer({
-      id: LAYER_CIRCLE_ID,
-      type: 'circle',
+      id: LAYER_ICON,
+      type: 'symbol',
       source: SOURCE_ID,
-      paint: {
-        'circle-radius': [
+      layout: {
+        'icon-image': IMAGE_ID,
+        'icon-size': [
           'interpolate', ['linear'], ['zoom'],
-          5, 5, 10, 10, 14, 16,
+          5, 0.15, 8, 0.25, 11, 0.45, 14, 0.7,
         ],
-        'circle-color': ['get', 'color'],
-        'circle-opacity': 0.85,
-        'circle-stroke-width': 1.5,
-        'circle-stroke-color': '#ffffff',
-        'circle-stroke-opacity': 0.6,
+        'icon-allow-overlap': false,
+        'icon-padding': 2,
+      },
+      paint: {
+        'icon-color': ['get', 'color'],
+        'icon-opacity': 0.9,
       },
     })
 
+    // Layer prix texte
     map.addLayer({
-      id: LAYER_LABEL_ID,
+      id: LAYER_LABEL,
       type: 'symbol',
       source: SOURCE_ID,
-      minzoom: 9,
+      minzoom: 11,
       layout: {
-        'text-field': ['concat', ['to-string', ['get', 'price_sp95']], ' €'],
+        'text-field': ['concat', ['to-string', ['get', 'best_price']], ' €'],
         'text-font': ['Open Sans Semibold', 'Arial Unicode MS Bold'],
-        'text-size': 11,
-        'text-offset': [0, 1.4],
+        'text-size': 10,
+        'text-offset': [0, 2],
         'text-anchor': 'top',
+        'text-allow-overlap': false,
       },
       paint: {
         'text-color': '#f1f5f9',
@@ -135,33 +339,31 @@ export const fuelPlugin: FranceDataPlugin = {
       },
     })
 
-    // Clic station → panneau détail via le store
+    // Clic → panneau détail
     clickHandler = (e) => {
       if (!e.features?.length) return
       e.preventDefault()
-      usePluginStore().selectFeature({
-        pluginId: 'fuel',
-        properties: e.features[0].properties as Record<string, unknown>,
-      })
+      store.selectFeature({ pluginId: 'fuel', properties: e.features[0].properties as Record<string, unknown> })
     }
-    map.on('click', LAYER_CIRCLE_ID, clickHandler)
+    map.on('click', LAYER_ICON, clickHandler)
 
-    // Clic fond → fermer le panneau
     bgClickHandler = (e) => {
       if ((e as typeof e & { defaultPrevented?: boolean }).defaultPrevented) return
-      usePluginStore().selectFeature(null)
+      const s = usePluginStore()
+      if (s.selectedFeature?.pluginId === 'fuel') s.selectFeature(null)
     }
     map.on('click', bgClickHandler)
 
-    map.on('mouseenter', LAYER_CIRCLE_ID, () => { map.getCanvas().style.cursor = 'pointer' })
-    map.on('mouseleave', LAYER_CIRCLE_ID, () => { map.getCanvas().style.cursor = '' })
+    map.on('mouseenter', LAYER_ICON, () => { map.getCanvas().style.cursor = 'pointer' })
+    map.on('mouseleave', LAYER_ICON, () => { map.getCanvas().style.cursor = '' })
   },
 
   teardown(map: MapLibreMap): void {
-    if (clickHandler) { map.off('click', LAYER_CIRCLE_ID, clickHandler); clickHandler = null }
+    if (clickHandler) { map.off('click', LAYER_ICON, clickHandler); clickHandler = null }
     if (bgClickHandler) { map.off('click', bgClickHandler); bgClickHandler = null }
-    if (map.getLayer(LAYER_LABEL_ID)) map.removeLayer(LAYER_LABEL_ID)
-    if (map.getLayer(LAYER_CIRCLE_ID)) map.removeLayer(LAYER_CIRCLE_ID)
+    if (map.getLayer(LAYER_LABEL)) map.removeLayer(LAYER_LABEL)
+    if (map.getLayer(LAYER_ICON)) map.removeLayer(LAYER_ICON)
     if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID)
+    if (map.hasImage(IMAGE_ID)) map.removeImage(IMAGE_ID)
   },
 }
