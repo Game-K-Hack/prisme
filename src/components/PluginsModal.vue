@@ -4,9 +4,8 @@ import {
   X, Power, PowerOff, Info, ChevronRight, Plus, Minus, Package, Search,
   Upload, Download, FileArchive, ExternalLink,
 } from 'lucide-vue-next'
-import * as LucideIcons from 'lucide-vue-next'
-import type { Component } from 'vue'
 import { usePluginStore } from '@/store/pluginStore'
+import PluginIcon from '@/components/PluginIcon.vue'
 import { PLUGIN_CATALOG } from '@/plugins/registry'
 import PluginSettingsPanel from '@/components/PluginSettingsPanel.vue'
 import {
@@ -31,9 +30,6 @@ const fileInput = ref<HTMLInputElement | null>(null)
 const conflictInfo = ref<{ existingLabel: string; newLabel: string; id: string; isExternal: boolean } | null>(null)
 let pendingImport: { manifest: Awaited<ReturnType<typeof extractPluginFile>>['manifest']; jsCode: string } | null = null
 
-function resolveIcon(name: string): Component {
-  return (LucideIcons as unknown as Record<string, Component>)[name] ?? LucideIcons.CircleDot
-}
 
 function toggleExpand(id: string): void {
   expandedPlugin.value = expandedPlugin.value === id ? null : id
@@ -381,7 +377,7 @@ async function downloadTemplate(): Promise<void> {
                     ? `background-color:${plugin.color}22;color:${plugin.color}`
                     : 'background-color:#1e2333;color:#475569'"
                 >
-                  <component :is="resolveIcon(plugin.icon)" class="w-4 h-4" />
+                  <PluginIcon :icon="plugin.icon" class="w-4 h-4" />
                 </div>
 
                 <div class="flex-1 min-w-0">
@@ -471,7 +467,7 @@ async function downloadTemplate(): Promise<void> {
                       <div>
                         <p class="text-[9px] uppercase tracking-wider text-slate-600">Icône</p>
                         <div class="flex items-center gap-1.5 mt-0.5">
-                          <component :is="resolveIcon(plugin.icon)" class="w-3 h-3 text-slate-400" />
+                          <PluginIcon :icon="plugin.icon" class="w-3 h-3 text-slate-400" />
                           <p class="text-[10px] text-slate-400 font-mono">{{ plugin.icon }}</p>
                         </div>
                       </div>
@@ -525,7 +521,7 @@ async function downloadTemplate(): Promise<void> {
                 class="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5"
                 :style="`background-color:${plugin.color}15;color:${plugin.color}`"
               >
-                <component :is="resolveIcon(plugin.icon)" class="w-4 h-4" />
+                <PluginIcon :icon="plugin.icon" class="w-4 h-4" />
               </div>
 
               <div class="flex-1 min-w-0">

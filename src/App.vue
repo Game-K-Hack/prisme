@@ -2,15 +2,14 @@
 import { ref, onMounted, computed } from 'vue'
 import {
   ChevronLeft, ChevronRight,
-  Map as MapIcon, Layers, CircleDot, X, Fuel,
-  Search, Settings2, Loader2, Trash2,
+  Map as MapIcon, Layers, X, Fuel,
+  Search, Settings2, Loader2,
   Zap, SlidersHorizontal,
 } from 'lucide-vue-next'
-import * as LucideIcons from 'lucide-vue-next'
-import type { Component } from 'vue'
 import MapEngine from '@/components/MapEngine.vue'
 import SettingsModal from '@/components/SettingsModal.vue'
 import PluginsModal from '@/components/PluginsModal.vue'
+import PluginIcon from '@/components/PluginIcon.vue'
 import { usePluginStore, MAP_LAYER_CONTROLS } from '@/store/pluginStore'
 import { useSettingsStore } from '@/store/settingsStore'
 import { PLUGIN_CATALOG } from '@/plugins/registry'
@@ -165,10 +164,6 @@ const fuelDetail = computed(() => {
   }
 })
 
-function resolveIcon(name: string): Component {
-  return (LucideIcons as unknown as Record<string, Component>)[name] ?? CircleDot
-}
-
 // Exposer les constantes au template
 const quickFilters = computed(() => settings.visibleQuickFilters)
 const mapLayerControls = MAP_LAYER_CONTROLS
@@ -242,7 +237,7 @@ const mapLayerControls = MAP_LAYER_CONTROLS
                   ? `background-color:${plugin.color}22;color:${plugin.color}`
                   : ''"
               >
-                <component :is="resolveIcon(plugin.icon)" class="w-4 h-4" />
+                <PluginIcon :icon="plugin.icon" class="w-4 h-4" />
               </span>
 
               <Transition name="fade">
@@ -297,7 +292,7 @@ const mapLayerControls = MAP_LAYER_CONTROLS
                 ? `color:${qf.color};border-color:${qf.color}40;background-color:${qf.color}15`
                 : ''"
             >
-              <component :is="resolveIcon(qf.icon)" class="w-3 h-3 flex-shrink-0" />
+              <PluginIcon :icon="qf.icon" class="w-3 h-3 flex-shrink-0" />
               <span class="truncate">{{ qf.label }}</span>
             </button>
           </div>
@@ -315,7 +310,7 @@ const mapLayerControls = MAP_LAYER_CONTROLS
                 : 'text-slate-500 hover:bg-surface-overlay hover:text-slate-300'"
               :style="pluginStore.isQuickFilterActive(qf.id) ? `color:${qf.color}` : ''"
             >
-              <component :is="resolveIcon(qf.icon)" class="w-4 h-4" />
+              <PluginIcon :icon="qf.icon" class="w-4 h-4" />
             </button>
           </div>
         </div>
@@ -394,7 +389,7 @@ const mapLayerControls = MAP_LAYER_CONTROLS
                              text-xs text-slate-400 hover:text-slate-200 hover:bg-surface-overlay
                              transition-colors text-left truncate"
                     >
-                      <component :is="resolveIcon(cat.icon ?? 'CircleDot')" class="w-3 h-3 flex-shrink-0" />
+                      <PluginIcon :icon="cat.icon ?? 'CircleDot'" class="w-3 h-3 flex-shrink-0" />
                       <span class="truncate">{{ cat.label }}</span>
                     </button>
                   </div>
@@ -439,7 +434,7 @@ const mapLayerControls = MAP_LAYER_CONTROLS
                 >
                   <span class="w-2.5 h-2.5 rounded-full flex-shrink-0" :style="`background-color:${search.color}`" />
                   <span class="text-xs text-slate-300 flex-1 truncate flex items-center gap-1.5">
-                    <component :is="resolveIcon(search.icon)" class="w-3 h-3 flex-shrink-0" />
+                    <PluginIcon :icon="search.icon" class="w-3 h-3 flex-shrink-0" />
                     {{ search.query }}
                   </span>
                   <span class="text-xs text-slate-500 flex-shrink-0">{{ search.count }}</span>
@@ -481,7 +476,7 @@ const mapLayerControls = MAP_LAYER_CONTROLS
               ]"
             >
               <span class="w-8 h-8 rounded-md flex items-center justify-center flex-shrink-0">
-                <component :is="resolveIcon(ctrl.icon)" class="w-4 h-4" />
+                <PluginIcon :icon="ctrl.icon" class="w-4 h-4" />
               </span>
               <template v-if="sidebarOpen">
                 <p class="text-sm font-medium truncate flex-1">{{ ctrl.label }}</p>
