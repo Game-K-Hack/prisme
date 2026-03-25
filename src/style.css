@@ -65,3 +65,8 @@ body,
 [style*="--color-emerald"] { background-color: #10b981 !important; }
 [style*="--color-rose"]    { background-color: #f43f5e !important; }
 [style*="--color-amber"]   { background-color: #f59e0b !important; }
+
+@font-face {
+  font-family: "title";
+  src: url("/title.woff2") format("woff2");
+}

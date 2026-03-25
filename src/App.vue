@@ -122,7 +122,7 @@ const mapLayerControls = MAP_LAYER_CONTROLS
           :class="sidebarOpen ? 'w-16 h-16' : 'w-9 h-9'"
         />
         <template v-if="sidebarOpen">
-          <span class="text-lg font-bold text-slate-100 tracking-wide truncate flex-1">Prisme</span>
+          <span class="text-7xl font-light text-slate-100 truncate flex-1 font-[title]">Prisme</span>
           <button
             @click="showSettings = true"
             title="Paramètres"
