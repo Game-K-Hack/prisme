@@ -28,6 +28,13 @@
         { "value": "gazole", "label": "Gazole" },
         { "value": "e85", "label": "E85" }
       ]
+    },
+    {
+      "key": "sync",
+      "label": "Synchroniser les données",
+      "description": "Vide le cache et re-télécharge",
+      "type": "action",
+      "icon": "RefreshCw"
     }
   ]
 }

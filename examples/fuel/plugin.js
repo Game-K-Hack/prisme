@@ -50,6 +50,14 @@
     catch(e) {}
   },
 
+  _getCachedFetchedAt: function() {
+    try {
+      var raw = localStorage.getItem(this._CACHE_KEY)
+      if (!raw) return null
+      return JSON.parse(raw).fetchedAt || null
+    } catch(e) { return null }
+  },
+
   _fetchCSV: function() {
     var self = this
     var cached = this._loadCache()
@@ -93,9 +101,13 @@
     var iDept = idx('Département'), iRegion = idx('Région')
     var iAuto = idx('Automate 24-24 (oui/non)')
     var iSvc = idx('Services proposés')
-    var iGaz = idx('Prix Gazole'), iSp95 = idx('Prix SP95')
-    var iSp98 = idx('Prix SP98'), iE10 = idx('Prix E10')
-    var iE85 = idx('Prix E85'), iGplc = idx('Prix GPLc')
+    var iGaz  = idx('Prix Gazole'),  iSp95 = idx('Prix SP95')
+    var iSp98 = idx('Prix SP98'),    iE10  = idx('Prix E10')
+    var iE85  = idx('Prix E85'),     iGplc = idx('Prix GPLc')
+    // Colonnes de date de mise à jour par carburant
+    var iDGaz  = idx('Prix Gazole mis à jour le'),  iDSp95 = idx('Prix SP95 mis à jour le')
+    var iDSp98 = idx('Prix SP98 mis à jour le'),    iDE10  = idx('Prix E10 mis à jour le')
+    var iDE85  = idx('Prix E85 mis à jour le'),     iDGplc = idx('Prix GPLc mis à jour le')
 
     var stations = []
     for (var i = 1; i < lines.length; i++) {
@@ -109,6 +121,12 @@
       if (isNaN(lat) || isNaN(lng) || lat < 41 || lat > 52 || lng < -6 || lng > 10) continue
 
       var p = function(v) { var n = parseFloat(v); return (v && !isNaN(n)) ? n : null }
+      // Normalise une date ISO optionnelle → timestamp ms ou null
+      var d = function(v) {
+        if (!v || !v.trim()) return null
+        var t = Date.parse(v.trim())
+        return isNaN(t) ? null : t
+      }
 
       stations.push({
         id: c[iId] || ('s' + i), lat: lat, lng: lng,
@@ -116,8 +134,11 @@
         cp: c[iCp] || '', dept: c[iDept] || '', region: c[iRegion] || '',
         automate: (c[iAuto] || '').toLowerCase() === 'oui',
         services: c[iSvc] || '',
-        gazole: p(c[iGaz]), sp95: p(c[iSp95]), sp98: p(c[iSp98]),
-        e10: p(c[iE10]), e85: p(c[iE85]), gplc: p(c[iGplc])
+        gazole: p(c[iGaz]),  sp95: p(c[iSp95]), sp98: p(c[iSp98]),
+        e10:    p(c[iE10]),  e85:  p(c[iE85]),  gplc: p(c[iGplc]),
+        // Dates de mise à jour par carburant (timestamp ms)
+        d_gazole: d(c[iDGaz]),  d_sp95: d(c[iDSp95]), d_sp98: d(c[iDSp98]),
+        d_e10:    d(c[iDE10]),  d_e85:  d(c[iDE85]),  d_gplc: d(c[iDGplc]),
       })
     }
     return stations
@@ -147,6 +168,52 @@
     return 'rgb(' + Math.round(249 - 10*t2) + ',' + Math.round(115 - 47*t2) + ',' + Math.round(22 + 46*t2) + ')'
   },
 
+  // Retourne la date de mise à jour pour le type de carburant actif
+  _getDate: function(s, fuelType) {
+    if (fuelType === 'best') {
+      // Pour "best", on prend la date du carburant dont le prix est affiché
+      var keys = ['e10', 'sp95', 'sp98', 'gazole', 'e85', 'gplc']
+      for (var i = 0; i < keys.length; i++) {
+        if (s[keys[i]]) return s['d_' + keys[i]] || null
+      }
+      return null
+    }
+    return s['d_' + fuelType] || null
+  },
+
+  _computeStats: function(stations, fuelType) {
+    var minPrice = Infinity, maxPrice = -Infinity
+    var minStation = null, maxStation = null
+    var sum = 0, count = 0
+    var latestDataDate = null  // date la plus récente dans les données
+    for (var i = 0; i < stations.length; i++) {
+      var s = stations[i]
+      var p = this._getPrice(s, fuelType)
+      if (!p) continue
+      sum += p; count++
+      if (p < minPrice) { minPrice = p; minStation = s }
+      if (p > maxPrice) { maxPrice = p; maxStation = s }
+      // Suivre la date de mise à jour la plus récente du dataset
+      var dt = this._getDate(s, fuelType)
+      if (dt && (latestDataDate === null || dt > latestDataDate)) latestDataDate = dt
+    }
+    return {
+      count: count,
+      avg: count > 0 ? sum / count : 0,
+      latestDataDate: latestDataDate,  // date la plus récente des prix dans les données
+      min: minStation ? {
+        price: minPrice, ville: minStation.ville,
+        adresse: minStation.adresse, dept: minStation.dept,
+        date: this._getDate(minStation, fuelType)
+      } : null,
+      max: maxStation ? {
+        price: maxPrice, ville: maxStation.ville,
+        adresse: maxStation.adresse, dept: maxStation.dept,
+        date: this._getDate(maxStation, fuelType)
+      } : null,
+    }
+  },
+
   _buildGeoJSON: function(stations, fuelType, colorByPrice) {
     var self = this
     var avg = colorByPrice ? self._computeAvg(stations, fuelType) : 0
@@ -164,6 +231,9 @@
           automate: s.automate, services: s.services,
           gazole: s.gazole, sp95: s.sp95, sp98: s.sp98,
           e10: s.e10, e85: s.e85, gplc: s.gplc,
+          // Dates de mise à jour par carburant (timestamp ms, null si absent)
+          d_gazole: s.d_gazole, d_sp95: s.d_sp95, d_sp98: s.d_sp98,
+          d_e10: s.d_e10, d_e85: s.d_e85, d_gplc: s.d_gplc,
           best_price: price,
           color: colorByPrice ? self._priceColor(price, avg) : self._COLOR
         }
@@ -176,6 +246,7 @@
 
   setup: function(map) {
     var self = this
+    self._map = map  // conserver la ref pour le handler sync
     if (map.getSource(self._SOURCE)) return
 
     // Lire les paramètres depuis le store Prisme
@@ -188,6 +259,14 @@
     }).then(function(csv) {
       var stations = self._parseStations(csv)
       if (stations.length === 0) return
+
+      // Stocker les stats et le timestamp pour le panneau détail
+      var setData = window.__PRISME_SET_PLUGIN_DATA__
+      if (setData) {
+        setData('fuel', 'stats', self._computeStats(stations, fuelType))
+        setData('fuel', 'fuelType', fuelType)
+        setData('fuel', 'fetchedAt', self._getCachedFetchedAt() || Date.now())
+      }
 
       map.addSource(self._SOURCE, {
         type: 'geojson',
@@ -249,6 +328,20 @@
 
       map.on('mouseenter', self._ICON_LAYER, function() { map.getCanvas().style.cursor = 'pointer' })
       map.on('mouseleave', self._ICON_LAYER, function() { map.getCanvas().style.cursor = '' })
+
+      // Enregistrer l'action "sync" : vide le cache et recharge
+      if (window.__PRISME_REGISTER_ACTION__) {
+        window.__PRISME_REGISTER_ACTION__('fuel', 'sync', function() {
+          return new Promise(function(resolve) {
+            localStorage.removeItem(self._CACHE_KEY)
+            self.teardown(self._map)
+            // Petit délai pour laisser le teardown se finaliser
+            setTimeout(function() {
+              self.setup(self._map).then(resolve).catch(resolve)
+            }, 100)
+          })
+        })
+      }
     })
   },
 

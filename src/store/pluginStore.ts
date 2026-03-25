@@ -440,6 +440,47 @@ export const usePluginStore = defineStore('plugins', () => {
       return getPluginSetting(pluginId, key)
     }
 
+  // Données partagées plugin → UI (stats, métadonnées, etc.)
+  const pluginData = ref<Map<string, Record<string, unknown>>>(new Map())
+
+  function setPluginData(pluginId: string, key: string, value: unknown): void {
+    const current = pluginData.value.get(pluginId) ?? {}
+    pluginData.value.set(pluginId, { ...current, [key]: value })
+    // Forcer la réactivité
+    pluginData.value = new Map(pluginData.value)
+  }
+
+  function getPluginData(pluginId: string, key: string): unknown {
+    return pluginData.value.get(pluginId)?.[key] ?? null
+  }
+
+  w.__PRISME_SET_PLUGIN_DATA__ =
+    (pluginId: string, key: string, value: unknown) => {
+      setPluginData(pluginId, key, value)
+    }
+
+  // Registre des actions plugin (callbacks enregistrés par plugin.js)
+  const actionRegistry = new Map<string, () => void | Promise<void>>()
+
+  function registerPluginAction(pluginId: string, actionKey: string, handler: () => void | Promise<void>): void {
+    actionRegistry.set(`${pluginId}::${actionKey}`, handler)
+  }
+
+  async function callPluginAction(pluginId: string, actionKey: string): Promise<void> {
+    const handler = actionRegistry.get(`${pluginId}::${actionKey}`)
+    if (handler) await handler()
+  }
+
+  w.__PRISME_REGISTER_ACTION__ =
+    (pluginId: string, actionKey: string, handler: () => void) => {
+      registerPluginAction(pluginId, actionKey, handler)
+    }
+
+  w.__PRISME_CALL_ACTION__ =
+    (pluginId: string, actionKey: string) => {
+      callPluginAction(pluginId, actionKey)
+    }
+
   function activatePlugin(id: string): void {
     const plugin = registry.value.get(id)
     if (!plugin || activeIds.value.has(id)) return
@@ -767,5 +808,9 @@ export const usePluginStore = defineStore('plugins', () => {
     // Carte — Couches
     labelsVisible, mapLayerVisibility,
     toggleLabels, toggleMapLayer,
+    // Données partagées plugins
+    pluginData, setPluginData, getPluginData,
+    // Actions plugins
+    registerPluginAction, callPluginAction,
   }
 })

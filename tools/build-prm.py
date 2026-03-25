@@ -23,7 +23,7 @@ if sys.stdout.encoding != 'utf-8':
 
 REQUIRED_FIELDS = ['id', 'label', 'icon', 'color']
 OPTIONAL_FIELDS = ['description', 'version', 'author', 'settings']
-SETTING_TYPES   = ['boolean', 'select', 'range', 'color']
+SETTING_TYPES   = ['boolean', 'select', 'range', 'color', 'action']
 
 def error(msg: str) -> None:
     print(f"\033[91m✗ Erreur :\033[0m {msg}")
@@ -80,7 +80,11 @@ def validate_manifest(data: dict) -> None:
             if not isinstance(setting, dict):
                 error(f"{prefix} doit être un objet")
 
-            for req in ['key', 'label', 'type', 'default']:
+            # 'default' n'est pas requis pour les actions
+            required = ['key', 'label', 'type']
+            if setting.get('type') != 'action':
+                required.append('default')
+            for req in required:
                 if req not in setting:
                     error(f"{prefix} — champ requis manquant : '{req}'")
 

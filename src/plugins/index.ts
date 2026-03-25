@@ -6,12 +6,14 @@ export interface PluginSettingDescriptor {
   key: string
   label: string
   description?: string
-  type: 'boolean' | 'select' | 'range' | 'color'
-  default: unknown
+  type: 'boolean' | 'select' | 'range' | 'color' | 'action'
+  default?: unknown
   options?: { value: string; label: string }[]  // pour type 'select'
   min?: number
   max?: number
   step?: number  // pour type 'range'
+  icon?: string  // pour type 'action'
+  danger?: boolean  // pour type 'action' — style rouge
 }
 
 /**

@@ -85,36 +85,84 @@ function clearAllSearches(): void {
 
 // ─── Détail carburant ────────────────────────────────────────────────────────
 
-interface FuelPrice { label: string; sub: string; value: number; accent: boolean }
+interface FuelPrice { label: string; sub: string; value: number; accent: boolean; updatedAt: number | null }
+
+interface FuelStationStat {
+  price: number
+  ville: string
+  adresse: string
+  dept: string
+  date: number | null
+}
+
+const FUEL_TYPE_LABELS: Record<string, { label: string; sub: string }> = {
+  e10:    { label: 'Sans Plomb 95-E10', sub: 'E10' },
+  sp95:   { label: 'Sans Plomb 95',     sub: 'SP95' },
+  sp98:   { label: 'Sans Plomb 98',     sub: 'SP98' },
+  gazole: { label: 'Gazole',            sub: 'Diesel' },
+  e85:    { label: 'Superéthanol',      sub: 'E85' },
+  gplc:   { label: 'GPL',              sub: 'GPLc' },
+  best:   { label: 'Meilleur prix',     sub: 'Auto' },
+}
+
+function formatDate(ts: number): string {
+  return new Intl.DateTimeFormat('fr-FR', {
+    weekday: 'long', day: 'numeric', month: 'long',
+    hour: '2-digit', minute: '2-digit',
+  }).format(new Date(ts))
+}
 
 const fuelDetail = computed(() => {
   const f = pluginStore.selectedFeature
   if (!f || f.pluginId !== 'fuel') return null
   const p = f.properties
 
-  const ville = String(p['ville'] ?? '')
-  const adresse = String(p['adresse'] ?? '')
-  const cp = String(p['cp'] ?? '')
-  const dept = String(p['departement'] ?? '')
-  const region = String(p['region'] ?? '')
+  const ville   = String(p['ville']        ?? '')
+  const adresse = String(p['adresse']      ?? '')
+  const cp      = String(p['cp']           ?? '')
+  const dept    = String(p['departement']  ?? '')
+  const region  = String(p['region']       ?? '')
   const automate = p['automate'] === true || p['automate'] === 'true'
 
   const prices: FuelPrice[] = []
   const add = (label: string, sub: string, key: string, accent: boolean) => {
     const v = Number(p[key])
-    if (v && v > 0) prices.push({ label, sub, value: v, accent })
+    if (v && v > 0) {
+      const dateRaw = p[`d_${key}`]
+      const updatedAt = dateRaw ? Number(dateRaw) : null
+      prices.push({ label, sub, value: v, accent, updatedAt })
+    }
   }
-  add('Sans Plomb 95-E10', 'E10', 'e10', true)
-  add('Sans Plomb 95', 'SP95', 'sp95', false)
-  add('Sans Plomb 98', 'SP98', 'sp98', false)
-  add('Gazole', 'Diesel', 'gazole', false)
-  add('Superéthanol', 'E85', 'e85', false)
-  add('GPL', 'GPLc', 'gplc', false)
+  add('Sans Plomb 95-E10', 'E10',    'e10',    true)
+  add('Sans Plomb 95',     'SP95',   'sp95',   false)
+  add('Sans Plomb 98',     'SP98',   'sp98',   false)
+  add('Gazole',            'Diesel', 'gazole', false)
+  add('Superéthanol',      'E85',    'e85',    false)
+  add('GPL',               'GPLc',   'gplc',   false)
 
   const servicesRaw = String(p['services'] ?? '')
-  const services = servicesRaw ? servicesRaw.split(',').map(s => s.trim()).filter(Boolean) : []
+  const services = servicesRaw ? servicesRaw.split(',').map((s: string) => s.trim()).filter(Boolean) : []
 
-  return { ville, adresse, cp, dept, region, automate, prices, services }
+  // Stats globales stockées par le plugin
+  const rawStats = pluginStore.getPluginData('fuel', 'stats') as {
+    count: number; avg: number;
+    latestDataDate: number | null;
+    min: FuelStationStat | null;
+    max: FuelStationStat | null;
+  } | null
+
+  const activeFuelType = String(pluginStore.getPluginData('fuel', 'fuelType') ?? 'best')
+  const fuelTypeInfo = FUEL_TYPE_LABELS[activeFuelType] ?? FUEL_TYPE_LABELS['best']
+  const fetchedAt = pluginStore.getPluginData('fuel', 'fetchedAt') as number | null
+
+  return {
+    ville, adresse, cp, dept, region, automate,
+    prices, services,
+    stats: rawStats,
+    fuelTypeInfo,
+    fetchedAt,
+    fetchedAtLabel: fetchedAt ? formatDate(fetchedAt) : null,
+  }
 })
 
 function resolveIcon(name: string): Component {
@@ -532,21 +580,30 @@ const mapLayerControls = MAP_LAYER_CONTROLS
             <div
               v-for="(price, i) in fuelDetail.prices"
               :key="i"
-              class="flex items-center justify-between bg-surface rounded-lg px-4 py-3"
+              class="bg-surface rounded-lg px-4 py-3"
             >
-              <div>
-                <p class="text-sm font-medium text-slate-300">{{ price.label }}</p>
-                <p class="text-xs text-slate-500 mt-0.5">{{ price.sub }}</p>
+              <div class="flex items-center justify-between">
+                <div>
+                  <p class="text-sm font-medium text-slate-300">{{ price.label }}</p>
+                  <p class="text-xs text-slate-500 mt-0.5">{{ price.sub }}</p>
+                </div>
+                <div class="text-right">
+                  <p
+                    class="text-xl font-bold leading-none"
+                    :class="price.accent ? 'text-blue-400' : 'text-slate-300'"
+                  >
+                    {{ price.value.toFixed(3) }}
+                  </p>
+                  <p class="text-xs text-slate-500 mt-1">€ / litre</p>
+                </div>
               </div>
-              <div class="text-right">
-                <p
-                  class="text-xl font-bold leading-none"
-                  :class="price.accent ? 'text-blue-400' : 'text-slate-300'"
-                >
-                  {{ price.value.toFixed(3) }}
-                </p>
-                <p class="text-xs text-slate-500 mt-1">€ / litre</p>
-              </div>
+              <!-- Date de mise à jour du prix -->
+              <p v-if="price.updatedAt" class="mt-1.5 text-[11px] text-slate-600 flex items-center gap-1">
+                <svg class="w-2.5 h-2.5 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                  <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                </svg>
+                Mis à jour {{ formatDate(price.updatedAt) }}
+              </p>
             </div>
 
             <p v-if="fuelDetail.prices.length === 0" class="text-xs text-slate-600 text-center py-4">
@@ -588,6 +645,89 @@ const mapLayerControls = MAP_LAYER_CONTROLS
                 :key="i"
                 class="text-xs px-2.5 py-1 rounded-md bg-surface border border-surface-border text-slate-400"
               >{{ service }}</span>
+            </div>
+          </div>
+
+          <!-- Stats nationales -->
+          <div v-if="fuelDetail.stats" class="px-4 pb-4">
+            <p class="text-xs font-semibold uppercase tracking-widest text-slate-500 mb-2">
+              Comparaison nationale — {{ fuelDetail.fuelTypeInfo.sub }}
+            </p>
+
+            <!-- Moins chère -->
+            <div v-if="fuelDetail.stats.min" class="mb-2 bg-emerald-500/8 border border-emerald-500/20 rounded-lg px-3 py-2.5">
+              <div class="flex items-center gap-2 mb-1">
+                <span class="text-[10px] font-semibold uppercase tracking-wider text-emerald-500">
+                  ↓ Moins chère
+                </span>
+                <span class="ml-auto text-base font-bold text-emerald-400 leading-none">
+                  {{ fuelDetail.stats.min.price.toFixed(3) }} €
+                </span>
+              </div>
+              <p class="text-xs text-emerald-300/80 truncate">{{ fuelDetail.stats.min.ville }}</p>
+              <p class="text-[11px] text-emerald-300/50 truncate mt-0.5">{{ fuelDetail.stats.min.adresse }}</p>
+              <p class="text-[11px] text-emerald-300/40 mt-0.5">{{ fuelDetail.stats.min.dept }}</p>
+              <p v-if="fuelDetail.stats.min.date" class="text-[10px] text-emerald-300/30 mt-1 capitalize">
+                {{ formatDate(fuelDetail.stats.min.date) }}
+              </p>
+            </div>
+
+            <!-- Plus chère -->
+            <div v-if="fuelDetail.stats.max" class="bg-red-500/8 border border-red-500/20 rounded-lg px-3 py-2.5">
+              <div class="flex items-center gap-2 mb-1">
+                <span class="text-[10px] font-semibold uppercase tracking-wider text-red-400">
+                  ↑ Plus chère
+                </span>
+                <span class="ml-auto text-base font-bold text-red-400 leading-none">
+                  {{ fuelDetail.stats.max.price.toFixed(3) }} €
+                </span>
+              </div>
+              <p class="text-xs text-red-300/80 truncate">{{ fuelDetail.stats.max.ville }}</p>
+              <p class="text-[11px] text-red-300/50 truncate mt-0.5">{{ fuelDetail.stats.max.adresse }}</p>
+              <p class="text-[11px] text-red-300/40 mt-0.5">{{ fuelDetail.stats.max.dept }}</p>
+              <p v-if="fuelDetail.stats.max.date" class="text-[10px] text-red-300/30 mt-1 capitalize">
+                {{ formatDate(fuelDetail.stats.max.date) }}
+              </p>
+            </div>
+
+            <!-- Moyenne -->
+            <div class="mt-2 flex items-center justify-between px-3 py-2 bg-surface rounded-lg">
+              <span class="text-xs text-slate-500">Moyenne nationale</span>
+              <span class="text-sm font-semibold text-slate-300">
+                {{ fuelDetail.stats.avg.toFixed(3) }} €/L
+              </span>
+            </div>
+
+            <!-- Nb stations -->
+            <p class="mt-1.5 text-center text-[11px] text-slate-600">
+              {{ fuelDetail.stats.count.toLocaleString('fr-FR') }} stations répertoriées
+            </p>
+          </div>
+
+          <!-- Horodatages -->
+          <div class="px-4 pb-5 space-y-2">
+            <!-- Date des données (prix les plus récents dans le dataset) -->
+            <div v-if="fuelDetail.stats?.latestDataDate" class="flex items-start gap-2 px-3 py-2.5 bg-surface rounded-lg">
+              <svg class="w-3.5 h-3.5 text-indigo-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+              </svg>
+              <div>
+                <p class="text-[10px] font-semibold uppercase tracking-wider text-indigo-400">Date des données</p>
+                <p class="text-xs text-slate-300 mt-0.5 capitalize">{{ formatDate(fuelDetail.stats.latestDataDate) }}</p>
+                <p class="text-[11px] text-slate-600 mt-0.5">Prix le plus récent du dataset</p>
+              </div>
+            </div>
+
+            <!-- Horodatage du téléchargement -->
+            <div v-if="fuelDetail.fetchedAtLabel" class="flex items-start gap-2 px-3 py-2.5 bg-surface rounded-lg">
+              <svg class="w-3.5 h-3.5 text-slate-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+              <div>
+                <p class="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Téléchargé</p>
+                <p class="text-xs text-slate-400 mt-0.5 capitalize">{{ fuelDetail.fetchedAtLabel }}</p>
+                <p class="text-[11px] text-slate-600 mt-0.5">Cache local — expire après 24h</p>
+              </div>
             </div>
           </div>
 
