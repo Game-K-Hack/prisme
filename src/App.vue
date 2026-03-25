@@ -15,12 +15,13 @@ import { usePluginStore, MAP_LAYER_CONTROLS } from '@/store/pluginStore'
 import { useSettingsStore } from '@/store/settingsStore'
 import { PLUGIN_CATALOG } from '@/plugins/registry'
 import { loadStoredPlugins, compileExternalPlugin } from '@/plugins/externalLoader'
+import { loadBundledPlugins } from '@/plugins/bundledLoader'
 
 const pluginStore = usePluginStore()
 const settings = useSettingsStore()
 
-onMounted(() => {
-  // Restaurer les plugins built-in
+onMounted(async () => {
+  // 1. Restaurer les plugins built-in (TypeScript)
   const savedIds = pluginStore.getInstalledIds()
   if (savedIds.length > 0) {
     for (const plugin of PLUGIN_CATALOG) {
@@ -32,7 +33,7 @@ onMounted(() => {
     }
   }
 
-  // Restaurer les plugins externes depuis localStorage
+  // 2. Restaurer les plugins externes depuis localStorage
   for (const stored of loadStoredPlugins()) {
     try {
       const plugin = compileExternalPlugin(stored.manifest, stored.jsCode)
@@ -41,6 +42,9 @@ onMounted(() => {
       console.error(`[Prisme] Plugin externe "${stored.manifest.id}" invalide:`, err)
     }
   }
+
+  // 3. Charger les plugins bundlés (.prm dans public/plugins/)
+  await loadBundledPlugins()
 })
 
 const sidebarOpen = ref(true)
@@ -495,7 +499,7 @@ const mapLayerControls = MAP_LAYER_CONTROLS
     <aside
       class="absolute top-0 right-0 h-full z-30 bg-surface-raised border-l border-surface-border
              flex flex-col overflow-hidden transition-transform duration-300 ease-in-out w-80"
-      :class="fuelDetail ? 'translate-x-0' : 'translate-x-full'"
+      :class="pluginStore.selectedFeature ? 'translate-x-0' : 'translate-x-full'"
     >
       <div v-if="fuelDetail" class="w-80 flex flex-col h-full">
         <!-- En-tête -->

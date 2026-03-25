@@ -14,6 +14,7 @@ import {
   storeExternalPlugin, removeStoredPlugin,
   generateTemplatePrm,
 } from '@/plugins/externalLoader'
+import { bundledManifests } from '@/plugins/bundledLoader'
 
 defineProps<{ open: boolean }>()
 const emit = defineEmits<{ close: [] }>()
@@ -25,6 +26,10 @@ const searchQuery = ref('')
 const importError = ref('')
 const importLoading = ref(false)
 const fileInput = ref<HTMLInputElement | null>(null)
+
+// Conflit d'ID
+const conflictInfo = ref<{ existingLabel: string; newLabel: string; id: string; isExternal: boolean } | null>(null)
+let pendingImport: { manifest: Awaited<ReturnType<typeof extractPluginFile>>['manifest']; jsCode: string } | null = null
 
 function resolveIcon(name: string): Component {
   return (LucideIcons as unknown as Record<string, Component>)[name] ?? LucideIcons.CircleDot
@@ -47,13 +52,35 @@ const filteredInstalled = computed(() =>
   pluginStore.plugins.filter(p => matchesSearch(p.label, p.description))
 )
 
-const availablePlugins = computed(() =>
-  PLUGIN_CATALOG.filter(p => !pluginStore.registry.has(p.id) && matchesSearch(p.label, p.description))
-)
+/** Tous les plugins disponibles mais non installés (built-in + bundlés .prm) */
+const availablePlugins = computed(() => {
+  const installed = pluginStore.registry
+
+  // Built-in TypeScript
+  const builtIn = PLUGIN_CATALOG
+    .filter(p => !installed.has(p.id) && matchesSearch(p.label, p.description))
+    .map(p => ({ id: p.id, label: p.label, icon: p.icon, color: p.color, description: p.description, source: 'builtin' as const }))
+
+  // Bundlés .prm (public/plugins/)
+  const bundled = bundledManifests.value
+    .filter(b => !installed.has(b.manifest.id) && matchesSearch(b.manifest.label, b.manifest.description))
+    .map(b => ({ id: b.manifest.id, label: b.manifest.label, icon: b.manifest.icon, color: b.manifest.color, description: b.manifest.description, source: 'bundled' as const }))
+
+  return [...builtIn, ...bundled]
+})
 
 function installPlugin(id: string): void {
-  const plugin = PLUGIN_CATALOG.find(p => p.id === id)
-  if (plugin) pluginStore.registerPlugin(plugin)
+  // D'abord chercher dans le catalogue built-in
+  const builtIn = PLUGIN_CATALOG.find(p => p.id === id)
+  if (builtIn) { pluginStore.registerPlugin(builtIn); return }
+
+  // Sinon chercher dans les bundlés
+  const bundled = bundledManifests.value.find(b => b.manifest.id === id)
+  if (bundled) {
+    const plugin = compileExternalPlugin(bundled.manifest, bundled.jsCode)
+    storeExternalPlugin(bundled.manifest, bundled.jsCode)
+    pluginStore.registerPlugin(plugin, true)
+  }
 }
 
 function removePlugin(id: string): void {
@@ -94,19 +121,45 @@ async function handleFileSelected(event: Event): Promise<void> {
 
     // Vérifier si un plugin avec cet ID existe déjà
     if (pluginStore.registry.has(manifest.id)) {
-      // Désinstaller l'ancien d'abord
-      removePlugin(manifest.id)
+      const existing = pluginStore.registry.get(manifest.id)!
+      pendingImport = { manifest, jsCode }
+      conflictInfo.value = {
+        id: manifest.id,
+        existingLabel: existing.label,
+        newLabel: manifest.label,
+        isExternal: pluginStore.isExternalPlugin(manifest.id),
+      }
+      importLoading.value = false
+      return // Attendre la réponse de l'utilisateur
     }
 
-    const plugin = compileExternalPlugin(manifest, jsCode)
-    storeExternalPlugin(manifest, jsCode)
-    pluginStore.registerPlugin(plugin, true)
-    activeTab.value = 'installed'
+    finishImport(manifest, jsCode)
   } catch (err) {
     importError.value = err instanceof Error ? err.message : String(err)
   } finally {
     importLoading.value = false
   }
+}
+
+function finishImport(manifest: Awaited<ReturnType<typeof extractPluginFile>>['manifest'], jsCode: string): void {
+  const plugin = compileExternalPlugin(manifest, jsCode)
+  storeExternalPlugin(manifest, jsCode)
+  pluginStore.registerPlugin(plugin, true)
+  activeTab.value = 'installed'
+  importLoading.value = false
+}
+
+function confirmReplace(): void {
+  if (!pendingImport || !conflictInfo.value) return
+  removePlugin(conflictInfo.value.id)
+  finishImport(pendingImport.manifest, pendingImport.jsCode)
+  conflictInfo.value = null
+  pendingImport = null
+}
+
+function cancelConflict(): void {
+  conflictInfo.value = null
+  pendingImport = null
 }
 
 // ─── Template ZIP ────────────────────────────────────────────────────────────
@@ -139,7 +192,7 @@ async function downloadTemplate(): Promise<void> {
             <div>
               <h2 class="text-sm font-semibold text-slate-100">Gestionnaire de plugins</h2>
               <p class="text-[10px] text-slate-500 mt-0.5">
-                {{ activeCount }} actif{{ activeCount > 1 ? 's' : '' }} · {{ totalInstalled }} installé{{ totalInstalled > 1 ? 's' : '' }} · {{ PLUGIN_CATALOG.length }} disponible{{ PLUGIN_CATALOG.length > 1 ? 's' : '' }}
+                {{ activeCount }} actif{{ activeCount > 1 ? 's' : '' }} · {{ totalInstalled }} installé{{ totalInstalled > 1 ? 's' : '' }} · {{ PLUGIN_CATALOG.length + bundledManifests.length }} disponible{{ (PLUGIN_CATALOG.length + bundledManifests.length) > 1 ? 's' : '' }}
               </p>
             </div>
             <button
@@ -205,6 +258,49 @@ async function downloadTemplate(): Promise<void> {
             <button @click="importError = ''" class="text-red-400/50 hover:text-red-400 flex-shrink-0">
               <X class="w-3 h-3" />
             </button>
+          </div>
+
+          <!-- Alerte conflit d'ID -->
+          <div v-if="conflictInfo" class="mx-5 mt-2 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+            <div class="flex items-start gap-2 mb-2">
+              <Info class="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+              <div class="flex-1">
+                <p class="text-sm font-medium text-amber-300">Conflit d'identifiant</p>
+                <p class="text-xs text-amber-400/80 mt-1">
+                  Un plugin avec l'ID <code class="px-1 py-0.5 rounded bg-amber-500/20 text-amber-300 font-mono text-[10px]">{{ conflictInfo.id }}</code>
+                  est déjà installé.
+                </p>
+              </div>
+            </div>
+
+            <div class="ml-6 space-y-1.5 mb-3">
+              <div class="flex items-center gap-2 text-xs">
+                <span class="text-slate-500 w-16">Existant :</span>
+                <span class="text-slate-300 font-medium">{{ conflictInfo.existingLabel }}</span>
+                <span
+                  class="text-[9px] px-1.5 py-0.5 rounded-full"
+                  :class="conflictInfo.isExternal
+                    ? 'bg-violet-500/15 text-violet-400'
+                    : 'bg-slate-700/50 text-slate-400'"
+                >{{ conflictInfo.isExternal ? 'Externe' : 'Built-in' }}</span>
+              </div>
+              <div class="flex items-center gap-2 text-xs">
+                <span class="text-slate-500 w-16">Nouveau :</span>
+                <span class="text-slate-300 font-medium">{{ conflictInfo.newLabel }}</span>
+              </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-2 ml-6">
+              <button
+                @click="cancelConflict"
+                class="px-3 py-1.5 rounded-md text-xs text-slate-400 hover:text-slate-200 transition-colors"
+              >Annuler</button>
+              <button
+                @click="confirmReplace"
+                class="px-3 py-1.5 rounded-md text-xs font-medium bg-amber-500/20 text-amber-300
+                       hover:bg-amber-500/30 transition-colors"
+              >Remplacer l'existant</button>
+            </div>
           </div>
 
           <!-- Barre de recherche -->

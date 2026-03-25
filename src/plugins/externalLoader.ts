@@ -80,6 +80,17 @@ export interface PluginManifest {
   description?: string
   version?: string
   author?: string
+  settings?: Array<{
+    key: string
+    label: string
+    description?: string
+    type: 'boolean' | 'select' | 'range' | 'color'
+    default: unknown
+    options?: Array<{ value: string; label: string }>
+    min?: number
+    max?: number
+    step?: number
+  }>
 }
 
 export interface StoredExternalPlugin {
@@ -216,6 +227,7 @@ export function compileExternalPlugin(
     icon: manifest.icon,
     color: manifest.color,
     description: manifest.description,
+    settingsDescriptors: manifest.settings,
     setup(map: MapLibreMap) {
       module.setup(map)
     },

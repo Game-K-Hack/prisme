@@ -1,0 +1,33 @@
+{
+  "id": "fuel",
+  "label": "Prix Carburants",
+  "icon": "Fuel",
+  "color": "#3b82f6",
+  "description": "Prix des carburants en France — données data.gouv.fr (mise à jour quotidienne)",
+  "version": "0.1.3",
+  "author": "Prisme / data.economie.gouv.fr",
+  "settings": [
+    {
+      "key": "colorByPrice",
+      "label": "Colorer selon le prix",
+      "description": "Vert = moins cher que la moyenne, Rouge = plus cher",
+      "type": "boolean",
+      "default": true
+    },
+    {
+      "key": "fuelType",
+      "label": "Carburant de référence",
+      "description": "Détermine le prix affiché et la couleur",
+      "type": "select",
+      "default": "best",
+      "options": [
+        { "value": "best", "label": "Meilleur prix disponible" },
+        { "value": "e10", "label": "E10" },
+        { "value": "sp95", "label": "SP95" },
+        { "value": "sp98", "label": "SP98" },
+        { "value": "gazole", "label": "Gazole" },
+        { "value": "e85", "label": "E85" }
+      ]
+    }
+  ]
+}

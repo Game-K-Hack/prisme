@@ -425,6 +425,21 @@ export const usePluginStore = defineStore('plugins', () => {
     selectedFeature.value = feature
   }
 
+  // Bridge pour les plugins externes (window globals)
+  const w = window as unknown as Record<string, unknown>
+  w.__PRISME_SELECT_FEATURE__ =
+    (pluginId: string, properties: Record<string, unknown>) => {
+      selectFeature({ pluginId, properties })
+    }
+  w.__PRISME_CLEAR_FEATURE__ =
+    (pluginId: string) => {
+      if (selectedFeature.value?.pluginId === pluginId) selectFeature(null)
+    }
+  w.__PRISME_GET_SETTING__ =
+    (pluginId: string, key: string) => {
+      return getPluginSetting(pluginId, key)
+    }
+
   function activatePlugin(id: string): void {
     const plugin = registry.value.get(id)
     if (!plugin || activeIds.value.has(id)) return
