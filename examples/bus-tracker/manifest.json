@@ -1,0 +1,25 @@
+{
+  "id": "bus_tracker",
+  "label": "Bus Tracker",
+  "icon": "Bus",
+  "color": "#3b82f6",
+  "description": "Véhicules de transport en commun en temps réel (bus-tracker.fr).",
+  "version": "1.0.0",
+  "author": "Game-K-Hack",
+  "license": "MIT",
+  "tags": ["transport", "temps-réel"],
+  "settings": [
+    {
+      "key": "showComputed",
+      "type": "boolean",
+      "label": "Inclure les positions calculées",
+      "default": true
+    },
+    {
+      "key": "refresh",
+      "type": "action",
+      "label": "Actualiser maintenant",
+      "icon": "RefreshCw"
+    }
+  ]
+}

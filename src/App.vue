@@ -4,7 +4,7 @@ import {
   ChevronLeft, ChevronRight,
   Map as MapIcon, Layers, X, Fuel,
   Search, Settings2, Loader2,
-  Zap, SlidersHorizontal,
+  Zap, SlidersHorizontal, Bus,
 } from 'lucide-vue-next'
 import MapEngine from '@/components/MapEngine.vue'
 import SettingsModal from '@/components/SettingsModal.vue'
@@ -161,6 +161,80 @@ const fuelDetail = computed(() => {
     fuelTypeInfo,
     fetchedAt,
     fetchedAtLabel: fetchedAt ? formatDate(fetchedAt) : null,
+  }
+})
+
+// ─── Détail Bus Tracker ──────────────────────────────────────────────────────
+
+interface BusCall {
+  stopName: string
+  aimedTime: string
+  expectedTime?: string
+  callStatus: 'SCHEDULED' | 'UNSCHEDULED' | 'SKIPPED'
+  stopOrder: number
+}
+
+const OCCUPANCY_LABELS: Record<string, { label: string; color: string }> = {
+  LOW:           { label: 'Peu chargé',  color: '#22c55e' },
+  MEDIUM:        { label: 'Chargé',      color: '#f59e0b' },
+  HIGH:          { label: 'Très chargé', color: '#ef4444' },
+  NO_PASSENGERS: { label: 'Vide',        color: '#64748b' },
+}
+
+const DIRECTION_LABELS: Record<string, string> = {
+  OUTBOUND: 'Aller',
+  INBOUND:  'Retour',
+}
+
+function formatTime(iso: string | null | undefined): string {
+  if (!iso) return '--:--'
+  try {
+    return new Intl.DateTimeFormat('fr-FR', { hour: '2-digit', minute: '2-digit' }).format(new Date(iso))
+  } catch { return '--:--' }
+}
+
+const busTrackerDetail = computed(() => {
+  const f = pluginStore.selectedFeature
+  if (!f || f.pluginId !== 'bus_tracker') return null
+  const p = f.properties
+
+  let calls: BusCall[] = []
+  if (p['calls']) {
+    try { calls = JSON.parse(String(p['calls'])) } catch { /* ignore */ }
+  }
+
+  const occupancy = p['occupancy'] ? OCCUPANCY_LABELS[String(p['occupancy'])] ?? null : null
+  const direction = p['direction'] ? DIRECTION_LABELS[String(p['direction'])] ?? null : null
+
+  // Logo réseau : URL absolue depuis Google Cloud Storage
+  const rawLogo = p['networkLogo'] ? String(p['networkLogo']) : null
+  const networkLogo = rawLogo && (rawLogo.startsWith('http://') || rawLogo.startsWith('https://'))
+    ? rawLogo : null
+
+  // tc-infos.fr link (via tcId sur le véhicule)
+  const tcId = p['tcId'] ? String(p['tcId']) : null
+  const tcInfosUrl = tcId ? `https://tc-infos.fr/vehicule/${tcId}` : null
+
+  return {
+    id:            String(p['id']            ?? ''),
+    lineNumber:    String(p['lineNumber']    ?? ''),
+    fillColor:     String(p['fillColor']     ?? '#3b82f6'),
+    color:         String(p['color']         ?? '#ffffff'),
+    destination:   p['destination']   ? String(p['destination'])   : null,
+    direction,
+    occupancy,
+    vehicleNumber: p['vehicleNumber'] ? String(p['vehicleNumber']) : null,
+    networkName:   p['networkName']   ? String(p['networkName'])   : null,
+    networkAuth:   p['networkAuth']   ? String(p['networkAuth'])   : null,
+    networkColor:  p['networkColor']  ? String(p['networkColor'])  : null,
+    networkLogo,
+    tcId,
+    tcInfosUrl,
+    posType:       String(p['posType']       ?? 'GPS'),
+    recordedAt:    p['recordedAt']    ? String(p['recordedAt'])    : null,
+    updatedAt:     p['updatedAt']     ? String(p['updatedAt'])     : null,
+    calls,
+    loading:       p['_loading'] === true || p['_loading'] === 'true',
   }
 })
 
@@ -544,7 +618,197 @@ const mapLayerControls = MAP_LAYER_CONTROLS
              flex flex-col overflow-hidden transition-transform duration-300 ease-in-out w-80"
       :class="pluginStore.selectedFeature ? 'translate-x-0' : 'translate-x-full'"
     >
-      <div v-if="fuelDetail" class="w-80 flex flex-col h-full">
+      <!-- ── Détail : Bus Tracker ── -->
+      <div v-if="busTrackerDetail" class="w-80 flex flex-col h-full">
+        <!-- En-tête -->
+        <div class="flex items-center gap-3 px-4 py-4 border-b border-surface-border flex-shrink-0">
+          <div
+            class="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 font-bold text-sm leading-none"
+            :style="`background-color:${busTrackerDetail.fillColor}; color:${busTrackerDetail.color}`"
+          >
+            {{ busTrackerDetail.lineNumber || '?' }}
+          </div>
+          <div class="flex-1 min-w-0">
+            <p class="text-base font-semibold text-slate-100 truncate">
+              {{ busTrackerDetail.destination ?? 'Destination inconnue' }}
+            </p>
+            <div class="flex items-center gap-1.5 mt-0.5 flex-wrap">
+              <span v-if="busTrackerDetail.direction" class="text-xs text-slate-500">
+                {{ busTrackerDetail.direction }}
+              </span>
+              <span
+                v-if="busTrackerDetail.occupancy"
+                class="text-xs px-1.5 py-0.5 rounded-md font-medium"
+                :style="`background-color:${busTrackerDetail.occupancy.color}20; color:${busTrackerDetail.occupancy.color}`"
+              >
+                {{ busTrackerDetail.occupancy.label }}
+              </span>
+            </div>
+          </div>
+          <button
+            @click="pluginStore.selectFeature(null)"
+            class="w-7 h-7 flex items-center justify-center rounded-md
+                   text-slate-500 hover:text-slate-200 hover:bg-surface-overlay
+                   transition-colors flex-shrink-0"
+          >
+            <X class="w-4 h-4" />
+          </button>
+        </div>
+
+        <!-- Chargement -->
+        <div v-if="busTrackerDetail.loading" class="flex-1 flex items-center justify-center">
+          <Loader2 class="w-5 h-5 animate-spin text-slate-500" />
+        </div>
+
+        <!-- Contenu scrollable -->
+        <div v-else class="flex-1 overflow-y-auto">
+
+          <!-- Réseau / Opérateur -->
+          <div class="px-4 pt-4 pb-3">
+            <div class="flex items-center gap-2.5 bg-surface rounded-lg px-3 py-2.5">
+              <img
+                v-if="busTrackerDetail.networkLogo"
+                :src="busTrackerDetail.networkLogo"
+                class="w-8 h-8 rounded object-contain flex-shrink-0 bg-white/5"
+                @error="($event.target as HTMLImageElement).style.display='none'"
+              />
+              <div
+                v-else
+                class="w-8 h-8 rounded flex items-center justify-center flex-shrink-0"
+                :style="`background-color:${busTrackerDetail.networkColor ?? '#3b82f6'}30`"
+              >
+                <Bus class="w-4 h-4" :style="`color:${busTrackerDetail.networkColor ?? '#3b82f6'}`" />
+              </div>
+              <div class="min-w-0">
+                <p class="text-sm font-medium text-slate-200 truncate">
+                  {{ busTrackerDetail.networkName ?? 'Réseau inconnu' }}
+                </p>
+                <p v-if="busTrackerDetail.networkAuth" class="text-xs text-slate-500 truncate">
+                  {{ busTrackerDetail.networkAuth }}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Infos véhicule -->
+          <div class="px-4 pb-3 space-y-2">
+            <p class="text-xs font-semibold uppercase tracking-widest text-slate-500 mb-2">Véhicule</p>
+
+            <div class="grid grid-cols-2 gap-2">
+              <div class="bg-surface rounded-lg px-3 py-2.5">
+                <p class="text-[10px] font-semibold uppercase tracking-wider text-slate-600 mb-1">Numéro</p>
+                <p class="text-sm font-medium text-slate-200">{{ busTrackerDetail.vehicleNumber ?? '—' }}</p>
+              </div>
+              <div class="bg-surface rounded-lg px-3 py-2.5">
+                <p class="text-[10px] font-semibold uppercase tracking-wider text-slate-600 mb-1">Position</p>
+                <p
+                  class="text-sm font-medium"
+                  :class="busTrackerDetail.posType === 'GPS' ? 'text-emerald-400' : 'text-amber-400'"
+                >
+                  {{ busTrackerDetail.posType === 'GPS' ? 'GPS' : 'Calculée' }}
+                </p>
+              </div>
+            </div>
+
+            <!-- Horodatage position -->
+            <div v-if="busTrackerDetail.recordedAt" class="flex items-center gap-2 px-3 py-2 bg-surface rounded-lg">
+              <svg class="w-3.5 h-3.5 text-slate-500 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+              </svg>
+              <div class="flex-1 min-w-0">
+                <p class="text-[10px] text-slate-600">Dernière position</p>
+                <p class="text-xs text-slate-300">{{ formatTime(busTrackerDetail.recordedAt) }}</p>
+              </div>
+              <!-- Lien tc-infos.fr -->
+              <a
+                v-if="busTrackerDetail.tcInfosUrl"
+                :href="busTrackerDetail.tcInfosUrl"
+                target="_blank"
+                rel="noopener noreferrer"
+                title="Voir sur TC-Infos"
+                class="flex-shrink-0 px-2 py-1 rounded-md bg-indigo-500/15 border border-indigo-500/30
+                       text-indigo-400 hover:bg-indigo-500/25 hover:text-indigo-300
+                       text-[10px] font-semibold transition-colors flex items-center gap-1"
+              >
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
+                </svg>
+                TC-Infos
+              </a>
+            </div>
+          </div>
+
+          <!-- Prochains arrêts -->
+          <div v-if="busTrackerDetail.calls.length > 0" class="px-4 pb-4">
+            <p class="text-xs font-semibold uppercase tracking-widest text-slate-500 mb-2">
+              Arrêts ({{ busTrackerDetail.calls.length }})
+            </p>
+            <div class="relative">
+              <!-- Ligne verticale -->
+              <div class="absolute left-[9px] top-2 bottom-2 w-px bg-surface-border"></div>
+
+              <div class="space-y-0">
+                <div
+                  v-for="(call, i) in busTrackerDetail.calls"
+                  :key="i"
+                  class="flex items-start gap-3 py-1.5"
+                  :class="call.callStatus === 'SKIPPED' ? 'opacity-40' : ''"
+                >
+                  <!-- Dot -->
+                  <div
+                    class="w-[18px] h-[18px] rounded-full border-2 flex-shrink-0 mt-0.5 z-10 relative"
+                    :style="i === 0
+                      ? `background-color:${busTrackerDetail.fillColor}; border-color:${busTrackerDetail.fillColor}`
+                      : 'background-color:var(--surface); border-color:#334155'"
+                  ></div>
+
+                  <div class="flex-1 min-w-0 flex items-start justify-between gap-2">
+                    <p
+                      class="text-xs truncate leading-tight pt-0.5"
+                      :class="i === 0 ? 'text-slate-100 font-medium' : 'text-slate-400'"
+                    >
+                      {{ call.stopName }}
+                      <span v-if="call.callStatus === 'SKIPPED'" class="text-slate-600 ml-1">(sauté)</span>
+                    </p>
+                    <div class="text-right flex-shrink-0 pt-0.5">
+                      <p
+                        v-if="call.expectedTime"
+                        class="text-xs font-medium text-blue-400 leading-none"
+                      >{{ formatTime(call.expectedTime) }}</p>
+                      <p
+                        class="text-[11px] leading-none mt-0.5"
+                        :class="call.expectedTime ? 'text-slate-600 line-through' : 'text-slate-400'"
+                      >{{ formatTime(call.aimedTime) }}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Pas d'arrêts -->
+          <div v-else class="px-4 py-6 text-center">
+            <p class="text-xs text-slate-600">Aucun arrêt disponible</p>
+          </div>
+
+          <!-- Mis à jour -->
+          <div v-if="busTrackerDetail.updatedAt" class="px-4 pb-5">
+            <div class="flex items-center gap-2 px-3 py-2.5 bg-surface rounded-lg">
+              <svg class="w-3.5 h-3.5 text-slate-500 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+              <div>
+                <p class="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Données temps réel</p>
+                <p class="text-xs text-slate-400 mt-0.5">Mis à jour {{ formatTime(busTrackerDetail.updatedAt) }}</p>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- ── Détail : Fuel ── -->
+      <div v-else-if="fuelDetail" class="w-80 flex flex-col h-full">
         <!-- En-tête -->
         <div class="flex items-center gap-3 px-4 py-4 border-b border-surface-border flex-shrink-0">
           <div class="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 bg-blue-500/15">
