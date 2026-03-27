@@ -308,7 +308,7 @@ async function downloadTemplate(): Promise<void> {
               :style="activeTab === 'catalog' ? 'border-color: var(--accent-500)' : ''"
             >
               <Plus class="w-3.5 h-3.5" />
-              Catalogue ({{ availablePlugins.length }})
+              Catalogue ({{ remoteLoading ? availablePlugins.length : availableRemote.length + availablePlugins.length }})
             </button>
             <button
               @click="triggerFileInput"
